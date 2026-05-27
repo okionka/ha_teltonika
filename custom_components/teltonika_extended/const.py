@@ -25,3 +25,5 @@ SERVICE_RESTORE = "restore_config"
 
 # Backup storage path (relative to /config)
 BACKUP_DIR = "teltonika_backups"
+
+KEY_INTERFACES = "interfaces"

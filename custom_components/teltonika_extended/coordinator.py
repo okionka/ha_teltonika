@@ -17,6 +17,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     KEY_BACKUP_STATUS,
+    KEY_INTERFACES,
     KEY_DATA_USAGE,
     KEY_FIRMWARE,
     KEY_GPS,
@@ -98,6 +99,14 @@ class TeltonikaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             _LOGGER.debug("Wireless: %s", err)
             data[KEY_WIRELESS] = []
+
+        # All network interfaces (for traffic stats + WAN IP fallback)
+        try:
+            resp = await self.client.network.get_interfaces()
+            data[KEY_INTERFACES] = resp.data or [] if resp.success else []
+        except Exception as err:
+            _LOGGER.debug("Interfaces: %s", err)
+            data[KEY_INTERFACES] = []
 
         # Firmware (polled every cycle — update check is cached by router)
         try:

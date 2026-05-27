@@ -35,7 +35,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, KEY_BACKUP_STATUS, KEY_DATA_USAGE, KEY_FIRMWARE, KEY_GPS, KEY_MOBILE, KEY_SYSTEM, KEY_WAN
+from .const import DOMAIN, KEY_BACKUP_STATUS, KEY_DATA_USAGE, KEY_FIRMWARE, KEY_GPS, KEY_INTERFACES, KEY_MOBILE, KEY_SYSTEM, KEY_WAN
 from .coordinator import TeltonikaCoordinator
 
 
@@ -160,6 +160,11 @@ SYSTEM_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         value_fn=lambda d: _fmt_mac(_a(d, "mnf_info", "mac")),
     ),
     TeltonikaSensorDesc(
+        key="wan_ip", name="WAN IP address",
+        icon="mdi:ip-network", group="system",
+        value_fn=lambda d: _a(d, "board", "network", "wan", "default_ip"),
+    ),
+    TeltonikaSensorDesc(
         key="lan_ip", name="LAN IP address",
         icon="mdi:ip-network-outline", group="system",
         value_fn=lambda d: _a(d, "board", "network", "lan", "default_ip"),
@@ -169,6 +174,55 @@ SYSTEM_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         icon="mdi:linux", group="system",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _a(d, "static", "kernel"),
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Interface traffic sensors (WiFi + Mobile + WAN IP from interfaces)
+# ---------------------------------------------------------------------------
+
+def _iface_sensors_for(iface_name: str, label: str) -> tuple:
+    """Generate rx/tx sensors for a named interface."""
+    return (
+        TeltonikaSensorDesc(
+            key=f"iface_{iface_name}_rx",
+            name=f"{label} received",
+            icon="mdi:download-network",
+            native_unit_of_measurement="B",
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            group="interfaces",
+            value_fn=lambda d, n=iface_name: next(
+                (getattr(i, "rx_bytes", None) for i in (d or []) if getattr(i, "name", "") == n),
+                None,
+            ),
+        ),
+        TeltonikaSensorDesc(
+            key=f"iface_{iface_name}_tx",
+            name=f"{label} sent",
+            icon="mdi:upload-network",
+            native_unit_of_measurement="B",
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            group="interfaces",
+            value_fn=lambda d, n=iface_name: next(
+                (getattr(i, "tx_bytes", None) for i in (d or []) if getattr(i, "name", "") == n),
+                None,
+            ),
+        ),
+    )
+
+
+STATIC_INTERFACE_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
+    # WAN IP from interfaces (more reliable than WAN status endpoint)
+    TeltonikaSensorDesc(
+        key="iface_wan_ip", name="WAN IP (interface)",
+        icon="mdi:ip-network", group="interfaces",
+        value_fn=lambda d: next(
+            (getattr(i, "ipaddr", None) for i in (d or [])
+             if getattr(i, "up", False) and getattr(i, "ipaddr", None)
+             and any(getattr(i, "name", "").startswith(p)
+                     for p in ("mob", "wwan", "ppp"))),
+            None,
+        ),
     ),
 )
 
@@ -508,6 +562,31 @@ async def async_setup_entry(
         for desc in GPS_SENSORS:
             entities.append(_GpsSensor(coordinator, entry, desc))
 
+    # Interface traffic sensors (WiFi, Mobile, WAN IP)
+    ifaces = coordinator.data.get(KEY_INTERFACES) or []
+    for desc in STATIC_INTERFACE_SENSORS:
+        entities.append(_InterfaceSensor(coordinator, entry, desc))
+
+    # Dynamic per-interface sensors for WiFi and mobile
+    seen = set()
+    for iface in ifaces:
+        name = getattr(iface, "name", "") or ""
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        itype = getattr(iface, "type", "") or ""
+        # WiFi interfaces
+        if name.startswith(("wlan", "wifi")) or itype == "wifi":
+            band = getattr(iface, "band", "") or ""
+            label = f"WiFi {band.upper()} traffic" if band else f"WiFi {name} traffic"
+            for desc in _iface_sensors_for(name, label):
+                entities.append(_InterfaceSensor(coordinator, entry, desc))
+        # Mobile interface traffic
+        elif name.startswith(("mob", "wwan", "ppp")):
+            label = f"Mobile {name} traffic"
+            for desc in _iface_sensors_for(name, label):
+                entities.append(_InterfaceSensor(coordinator, entry, desc))
+
     fw = coordinator.data.get(KEY_FIRMWARE)
     if fw is not None:
         for desc in FIRMWARE_SENSORS:
@@ -594,6 +673,14 @@ class _FirmwareSensor(_Base):
     def native_value(self):
         return self.entity_description.value_fn(
             self.coordinator.data.get(KEY_FIRMWARE)
+        )
+
+
+class _InterfaceSensor(_Base):
+    @property
+    def native_value(self):
+        return self.entity_description.value_fn(
+            self.coordinator.data.get(KEY_INTERFACES)
         )
 
 
