@@ -10,6 +10,7 @@ from teltasync import Teltasync
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.components.persistent_notification import async_create as notify_create
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
@@ -87,7 +88,7 @@ def _register_services(hass: HomeAssistant) -> None:
             data = await coordinator.client.export_config()
         except Exception as err:
             _LOGGER.error("Backup failed: %s", err)
-            hass.components.persistent_notification.async_create(
+            notify_create(hass, 
                 f"Teltonika backup failed: {err}",
                 title="Teltonika Backup",
                 notification_id="teltonika_backup_error",
@@ -110,7 +111,7 @@ def _register_services(hass: HomeAssistant) -> None:
             f.write(data)
 
         _LOGGER.info("Router config backed up to %s (%d bytes)", filepath, len(data))
-        hass.components.persistent_notification.async_create(
+        notify_create(hass, 
             f"Router configuration saved to:\n`/config/{BACKUP_DIR}/{filename}`\n\n"
             f"Size: {len(data):,} bytes",
             title="Teltonika Backup successful",
@@ -136,7 +137,7 @@ def _register_services(hass: HomeAssistant) -> None:
 
         if not os.path.exists(file_path):
             _LOGGER.error("Restore file not found: %s", file_path)
-            hass.components.persistent_notification.async_create(
+            notify_create(hass, 
                 f"File not found: `{file_path}`",
                 title="Teltonika Restore failed",
                 notification_id="teltonika_restore_error",
@@ -150,7 +151,7 @@ def _register_services(hass: HomeAssistant) -> None:
             ok = await coordinator.client.import_config(data)
         except Exception as err:
             _LOGGER.error("Restore failed: %s", err)
-            hass.components.persistent_notification.async_create(
+            notify_create(hass, 
                 f"Restore failed: {err}",
                 title="Teltonika Restore failed",
                 notification_id="teltonika_restore_error",
@@ -159,7 +160,7 @@ def _register_services(hass: HomeAssistant) -> None:
 
         if ok:
             _LOGGER.info("Router config restored from %s", file_path)
-            hass.components.persistent_notification.async_create(
+            notify_create(hass, 
                 f"Configuration restored from:\n`{file_path}`\n\n"
                 "The router is rebooting to apply settings.",
                 title="Teltonika Restore successful",

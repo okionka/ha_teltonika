@@ -1,11 +1,19 @@
 """Sensor platform for Teltonika Extended."""
 from __future__ import annotations
 
+from datetime import timezone
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from teltasync.modems import ModemStatusFull
+
+try:
+    from dateutil import parser as dateutil_parser
+    _HAS_DATEUTIL = True
+except ImportError:
+    _HAS_DATEUTIL = False
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -43,6 +51,29 @@ def _fmt_mac(raw: str | None) -> str | None:
     if len(clean) != 12:
         return raw
     return ":".join(clean[i:i+2] for i in range(0, 12, 2))
+
+
+def _parse_gps_datetime(raw: str | None):
+    """Parse GPS datetime string to timezone-aware datetime (UTC)."""
+    if not raw or raw in ("N/A", "unknown", ""):
+        return None
+    try:
+        if _HAS_DATEUTIL:
+            dt = dateutil_parser.parse(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        # Fallback: try common GPS formats
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%SZ",
+                    "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M:%S"):
+            try:
+                from datetime import datetime as _dt
+                return _dt.strptime(raw, fmt).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+    except Exception:
+        pass
+    return raw  # return raw string as fallback
 
 
 def _fmt_signal(raw: int | None, unit: str) -> str | None:
@@ -352,16 +383,12 @@ GPS_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
     ),
     TeltonikaSensorDesc(
         key="datetime", name="GPS datetime",
-        icon="mdi:clock-time-four-outline", group="gps",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        group="gps",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d: _a(d, "datetime") or _a(d, "date"),
-    ),
-    # Raw debug sensor — shows full GPS API response as JSON string
-    TeltonikaSensorDesc(
-        key="gps_raw", name="GPS raw response",
-        icon="mdi:code-json", group="gps",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d: str(d.model_dump(exclude_none=True)) if d else None,
+        value_fn=lambda d: _parse_gps_datetime(
+            _a(d, "datetime") or _a(d, "date")
+        ),
     ),
 )
 

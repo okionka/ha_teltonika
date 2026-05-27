@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 
 from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
+from homeassistant.components.persistent_notification import async_create as notify_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
@@ -26,11 +27,14 @@ def _a(obj, *keys, default=None):
     return default if obj is None else obj
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry,
-                            async_add_entities: AddEntitiesCallback) -> None:
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     coordinator: TeltonikaCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
-        RebootButton(coordinator, entry),
+        RebootButton(coordinator, entry, hass),
         BackupButton(coordinator, entry, hass),
     ])
 
@@ -38,8 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry,
 class _ButtonBase(CoordinatorEntity[TeltonikaCoordinator], ButtonEntity):
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, entry):
+    def __init__(self, coordinator: TeltonikaCoordinator,
+                 entry: ConfigEntry, hass: HomeAssistant) -> None:
         super().__init__(coordinator)
+        self._hass = hass
+        self._entry = entry
         sys = coordinator.system_info
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -49,7 +56,6 @@ class _ButtonBase(CoordinatorEntity[TeltonikaCoordinator], ButtonEntity):
             sw_version=_a(sys, "static", "fw_version"),
             configuration_url=f"https://{coordinator.host}",
         )
-        self._entry = entry
 
 
 class RebootButton(_ButtonBase):
@@ -58,8 +64,8 @@ class RebootButton(_ButtonBase):
     _attr_device_class = ButtonDeviceClass.RESTART
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
+    def __init__(self, coordinator, entry, hass):
+        super().__init__(coordinator, entry, hass)
         self._attr_unique_id = f"{entry.entry_id}_reboot"
 
     async def async_press(self) -> None:
@@ -71,44 +77,49 @@ class RebootButton(_ButtonBase):
 
 
 class BackupButton(_ButtonBase):
-    """Downloads router config to /config/teltonika_backups/ on press."""
+    """Saves router configuration to /config/teltonika_backups/ on press."""
     _attr_name = "Backup configuration"
     _attr_icon = "mdi:content-save-all"
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator, entry, hass):
-        super().__init__(coordinator, entry)
+        super().__init__(coordinator, entry, hass)
         self._attr_unique_id = f"{entry.entry_id}_backup"
-        self._hass = hass
 
     async def async_press(self) -> None:
         coordinator = self.coordinator
+        hass = self._hass
+
         try:
             data = await coordinator.client.export_config()
         except Exception as err:
             _LOGGER.error("Backup failed: %s", err)
-            self._hass.components.persistent_notification.async_create(
-                f"Backup fehlgeschlagen: {err}",
+            notify_create(
+                hass,
+                f"Backup fehlgeschlagen:\n{err}",
                 title="Teltonika Backup",
                 notification_id="teltonika_backup_error",
             )
             return
 
-        backup_dir = self._hass.config.path(BACKUP_DIR)
+        backup_dir = hass.config.path(BACKUP_DIR)
         os.makedirs(backup_dir, exist_ok=True)
 
-        sys_info = coordinator.system_info
-        hostname = _a(sys_info, "static", "hostname") or "router"
+        hostname = _a(coordinator.system_info, "static", "hostname") or "router"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{hostname}_{timestamp}.tar.gz"
         filepath = os.path.join(backup_dir, filename)
 
-        with open(filepath, "wb") as f:
-            f.write(data)
+        def _write() -> None:
+            with open(filepath, "wb") as f:
+                f.write(data)
+
+        await hass.async_add_executor_job(_write)
 
         _LOGGER.info("Backup saved: %s (%d bytes)", filepath, len(data))
-        self._hass.components.persistent_notification.async_create(
-            f"Konfiguration gespeichert:\n"
+        notify_create(
+            hass,
+            f"Konfiguration gespeichert unter:\n"
             f"`/config/{BACKUP_DIR}/{filename}`\n\n"
             f"Größe: {len(data):,} Bytes",
             title="Teltonika Backup erfolgreich",
