@@ -116,6 +116,18 @@ SYSTEM_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         icon="mdi:ip-network-outline", group="system",
         value_fn=lambda d: _a(d, "board", "network", "lan", "default_ip"),
     ),
+    TeltonikaSensorDesc(
+        key="fw_build_date", name="Firmware build date",
+        icon="mdi:calendar-clock", group="system",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _a(d, "static", "fw_build_date"),
+    ),
+    TeltonikaSensorDesc(
+        key="kernel_version", name="Kernel version",
+        icon="mdi:linux", group="system",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _a(d, "static", "kernel"),
+    ),
 )
 
 # ---------------------------------------------------------------------------
