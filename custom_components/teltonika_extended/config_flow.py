@@ -23,6 +23,14 @@ SCHEMA = vol.Schema({
 })
 
 
+def _normalize_url(host: str) -> str:
+    """Ensure host is a full URL with scheme, e.g. https://192.168.7.1"""
+    host = host.strip().rstrip("/")
+    if not host.startswith(("http://", "https://")):
+        host = f"https://{host}"
+    return host
+
+
 class TeltonikaExtendedConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -32,13 +40,15 @@ class TeltonikaExtendedConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            host = user_input[CONF_HOST].rstrip("/")
-            await self.async_set_unique_id(host)
+            base_url = _normalize_url(user_input[CONF_HOST])
+            await self.async_set_unique_id(base_url)
             self._abort_if_unique_id_configured()
 
-            session = async_get_clientsession(self.hass, verify_ssl=user_input[CONF_VERIFY_SSL])
+            session = async_get_clientsession(
+                self.hass, verify_ssl=user_input[CONF_VERIFY_SSL]
+            )
             client = Teltasync(
-                base_url=host,
+                base_url=base_url,
                 username=user_input[CONF_USERNAME],
                 password=user_input[CONF_PASSWORD],
                 session=session,
@@ -49,15 +59,20 @@ class TeltonikaExtendedConfigFlow(ConfigFlow, domain=DOMAIN):
                 title = (
                     getattr(info.static, "hostname", None)
                     or getattr(info.static, "device_name", None)
-                    or host
+                    or base_url
                 )
             except Exception as err:
-                _LOGGER.error("Connection to %s failed: %s", host, err)
+                _LOGGER.error("Connection to %s failed: %s", base_url, err)
                 errors["base"] = "cannot_connect"
             else:
                 return self.async_create_entry(
                     title=f"Teltonika {title}",
-                    data={**user_input, CONF_HOST: host},
+                    data={
+                        CONF_HOST: base_url,
+                        CONF_USERNAME: user_input[CONF_USERNAME],
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                        CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
+                    },
                 )
 
         return self.async_show_form(

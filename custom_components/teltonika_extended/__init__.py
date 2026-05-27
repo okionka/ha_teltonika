@@ -14,16 +14,26 @@ from .coordinator import TeltonikaCoordinator
 PLATFORMS = [Platform.SENSOR]
 
 
+def _normalize_url(host: str) -> str:
+    host = host.strip().rstrip("/")
+    if not host.startswith(("http://", "https://")):
+        host = f"https://{host}"
+    return host
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    session = async_get_clientsession(hass, verify_ssl=entry.data.get(CONF_VERIFY_SSL, False))
+    base_url = _normalize_url(entry.data[CONF_HOST])
+    verify_ssl = entry.data.get(CONF_VERIFY_SSL, False)
+
+    session = async_get_clientsession(hass, verify_ssl=verify_ssl)
     client = Teltasync(
-        base_url=entry.data[CONF_HOST],
+        base_url=base_url,
         username=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
         session=session,
-        verify_ssl=entry.data.get(CONF_VERIFY_SSL, False),
+        verify_ssl=verify_ssl,
     )
-    coordinator = TeltonikaCoordinator(hass, client, entry.data[CONF_HOST])
+    coordinator = TeltonikaCoordinator(hass, client, base_url)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
