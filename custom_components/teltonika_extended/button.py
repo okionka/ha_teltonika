@@ -1,5 +1,6 @@
 """Button platform for Teltonika Extended."""
 from __future__ import annotations
+import hashlib
 import logging
 import os
 from datetime import datetime
@@ -82,9 +83,10 @@ class RebootButton(_ButtonBase):
 class BackupButton(_ButtonBase):
     """
     Backup flow:
-      1. POST /backup/actions/generate  {data:{}}
-      2. GET  /backup/errors/status     (poll)
-      3. GET  /backup/actions/download
+      1. POST /backup/actions/generate  {"data": {}}
+         → router responds synchronously with sha256 + md5 when ready
+      2. GET  /backup/actions/download
+         → verify sha256, save to /config/teltonika_backups/
     """
     _attr_name = "Backup configuration"
     _attr_icon = "mdi:content-save-all"
@@ -94,47 +96,28 @@ class BackupButton(_ButtonBase):
         super().__init__(coordinator, entry, hass)
         self._attr_unique_id = f"{entry.entry_id}_backup"
         self._store = Store(
-            hass, _BACKUP_STORE_VERSION, f"{DOMAIN}_{entry.entry_id}_backup_status"
+            hass, _BACKUP_STORE_VERSION,
+            f"{DOMAIN}_{entry.entry_id}_backup_status",
         )
 
     async def async_press(self) -> None:
         hass = self._hass
         coordinator = self.coordinator
 
-        # Step 1: Generate
+        # Step 1: Generate backup (synchronous — router waits until done)
         notify_create(
             hass,
-            "Schritt 1/3: Backup wird auf dem Router erstellt…",
+            "Schritt 1/2: Backup wird auf dem Router erstellt…\n"
+            "(Bitte warten — der Router erstellt das Archiv)",
             title="Teltonika Backup",
             notification_id="teltonika_backup_progress",
         )
 
         try:
-            # Step 1: Generate backup on router
-            await coordinator.client.backup.generate()
+            result = await coordinator.client.backup.generate()
         except Exception as err:
             notify_dismiss(hass, "teltonika_backup_progress")
-            notify_create(
-                hass,
-                f"Backup fehlgeschlagen bei 'generate':\n`{err}`",
-                title="Teltonika Backup Fehler",
-                notification_id="teltonika_backup_error",
-            )
-            await self._save_status(hass, "error", str(err))
-            return
-
-        # Step 2: Poll status
-        notify_create(
-            hass,
-            "Schritt 2/3: Warte auf Backup-Fertigstellung…",
-            title="Teltonika Backup",
-            notification_id="teltonika_backup_progress",
-        )
-
-        try:
-            await coordinator.client.backup.wait_until_ready()
-        except (TimeoutError, RuntimeError) as err:
-            notify_dismiss(hass, "teltonika_backup_progress")
+            _LOGGER.error("Backup generate failed: %s", err)
             notify_create(
                 hass,
                 f"Backup-Erstellung fehlgeschlagen:\n`{err}`",
@@ -144,10 +127,10 @@ class BackupButton(_ButtonBase):
             await self._save_status(hass, "error", str(err))
             return
 
-        # Step 3: Download
+        # Step 2: Download
         notify_create(
             hass,
-            "Schritt 3/3: Backup wird heruntergeladen…",
+            "Schritt 2/2: Backup wird heruntergeladen…",
             title="Teltonika Backup",
             notification_id="teltonika_backup_progress",
         )
@@ -156,6 +139,7 @@ class BackupButton(_ButtonBase):
             data = await coordinator.client.backup.download()
         except Exception as err:
             notify_dismiss(hass, "teltonika_backup_progress")
+            _LOGGER.error("Backup download failed: %s", err)
             notify_create(
                 hass,
                 f"Backup-Download fehlgeschlagen:\n`{err}`",
@@ -164,6 +148,17 @@ class BackupButton(_ButtonBase):
             )
             await self._save_status(hass, "error", str(err))
             return
+
+        # Verify sha256 checksum
+        checksum_ok = True
+        if result.sha256:
+            actual = hashlib.sha256(data).hexdigest()
+            checksum_ok = actual == result.sha256
+            if not checksum_ok:
+                _LOGGER.warning(
+                    "Backup sha256 mismatch: expected %s got %s",
+                    result.sha256, actual,
+                )
 
         # Save to disk
         backup_dir = hass.config.path(BACKUP_DIR)
@@ -178,15 +173,20 @@ class BackupButton(_ButtonBase):
             lambda: open(filepath, "wb").write(data)
         )
 
-        _LOGGER.info("Backup saved: %s (%d bytes)", filepath, len(data))
         await self._save_status(hass, "success", filename, len(data), timestamp)
-
         notify_dismiss(hass, "teltonika_backup_progress")
+
+        checksum_line = (
+            f"✅ SHA256 verifiziert" if checksum_ok and result.sha256
+            else ("⚠️ SHA256 Prüfung fehlgeschlagen" if not checksum_ok else "")
+        )
+
         notify_create(
             hass,
             f"✅ Konfiguration gespeichert:\n"
             f"`/config/{BACKUP_DIR}/{filename}`\n\n"
-            f"Größe: {len(data):,} Bytes\n\n"
+            f"Größe: {len(data):,} Bytes\n"
+            f"{checksum_line}\n\n"
             f"Wiederherstellen:\n"
             f"Service `teltonika_extended.restore_config`\n"
             f"mit `file_path: {BACKUP_DIR}/{filename}`",
@@ -194,7 +194,6 @@ class BackupButton(_ButtonBase):
             notification_id="teltonika_backup_ok",
         )
 
-        # Refresh coordinator so the status sensor updates immediately
         coordinator.async_set_updated_data({
             **coordinator.data,
             "backup_status": await self._load_status(hass),
@@ -202,7 +201,7 @@ class BackupButton(_ButtonBase):
 
     async def _save_status(
         self, hass, status: str, info: str = "",
-        size: int = 0, timestamp: str = ""
+        size: int = 0, timestamp: str = "",
     ) -> None:
         await self._store.async_save({
             "status": status,
