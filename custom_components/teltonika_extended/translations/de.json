@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Teltonika Router verbinden",
+        "data": {
+          "host": "IP-Adresse oder Hostname",
+          "username": "Benutzername",
+          "password": "Passwort",
+          "verify_ssl": "SSL-Zertifikat validieren"
+        }
+      }
+    },
+    "error": { "cannot_connect": "Verbindung fehlgeschlagen." },
+    "abort": { "already_configured": "Router bereits konfiguriert." }
+  }
+}

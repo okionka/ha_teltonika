@@ -1,0 +1,92 @@
+"""DataUpdateCoordinator for Teltonika Extended."""
+from __future__ import annotations
+
+import logging
+from datetime import timedelta
+from typing import Any
+
+from teltasync import Teltasync
+from teltasync.modems import ModemStatusFull
+
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+from .const import (
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    KEY_DATA_USAGE,
+    KEY_GPS,
+    KEY_MOBILE,
+    KEY_SYSTEM,
+    KEY_WAN,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class TeltonikaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Fetches all data from the router every 30 s."""
+
+    def __init__(self, hass: HomeAssistant, client: Teltasync, host: str) -> None:
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+        )
+        self.client = client
+        self.host = host
+        self.system_info = None
+
+    async def _async_setup(self) -> None:
+        try:
+            self.system_info = await self.client.get_system_info()
+        except Exception as err:
+            raise ConfigEntryAuthFailed(f"Cannot connect to {self.host}: {err}") from err
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+
+        # System
+        try:
+            data[KEY_SYSTEM] = await self.client.get_system_info()
+            self.system_info = data[KEY_SYSTEM]
+        except Exception as err:
+            _LOGGER.warning("System info failed: %s", err)
+            data[KEY_SYSTEM] = self.system_info
+
+        # Mobile modems
+        try:
+            data[KEY_MOBILE] = await self.client.get_modem_status()
+        except Exception as err:
+            _LOGGER.warning("Modem status failed: %s", err)
+            data[KEY_MOBILE] = []
+
+        # GPS
+        try:
+            data[KEY_GPS] = await self.client.get_gps_status()
+        except Exception as err:
+            _LOGGER.debug("GPS unavailable: %s", err)
+            data[KEY_GPS] = None
+
+        # WAN
+        try:
+            data[KEY_WAN] = await self.client.get_wan_status()
+        except Exception as err:
+            _LOGGER.debug("WAN status failed: %s", err)
+            data[KEY_WAN] = None
+
+        # Data usage — fetch for each online modem
+        usage_list = []
+        for modem in (data[KEY_MOBILE] or []):
+            if isinstance(modem, ModemStatusFull) and modem.id:
+                try:
+                    usage = await self.client.get_modem_data_usage(modem.id)
+                    if usage:
+                        usage_list.append(usage)
+                except Exception as err:
+                    _LOGGER.debug("Data usage for modem %s failed: %s", modem.id, err)
+        data[KEY_DATA_USAGE] = usage_list or None
+
+        return data
