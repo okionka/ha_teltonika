@@ -261,6 +261,11 @@ MOBILE_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
 
 GPS_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
     TeltonikaSensorDesc(
+        key="fix", name="GPS fix",
+        icon="mdi:crosshairs", group="gps",
+        value_fn=lambda d: _a(d, "fix_status") or ("Fix" if _a(d, "fix") else "No fix"),
+    ),
+    TeltonikaSensorDesc(
         key="latitude", name="GPS latitude",
         icon="mdi:latitude", native_unit_of_measurement="°",
         state_class=SensorStateClass.MEASUREMENT,
@@ -305,15 +310,17 @@ GPS_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         value_fn=lambda d: _a(d, "accuracy"),
     ),
     TeltonikaSensorDesc(
-        key="fix", name="GPS fix",
-        icon="mdi:crosshairs", group="gps",
-        value_fn=lambda d: _a(d, "fix_status") or ("Fix" if _a(d, "fix") else "No fix"),
-    ),
-    TeltonikaSensorDesc(
         key="datetime", name="GPS datetime",
         icon="mdi:clock-time-four-outline", group="gps",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _a(d, "datetime") or _a(d, "date"),
+    ),
+    # Raw debug sensor — shows full GPS API response as JSON string
+    TeltonikaSensorDesc(
+        key="gps_raw", name="GPS raw response",
+        icon="mdi:code-json", group="gps",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: str(d.model_dump(exclude_none=True)) if d else None,
     ),
 )
 
@@ -382,7 +389,10 @@ async def async_setup_entry(
             for desc in MOBILE_SENSORS:
                 entities.append(_ModemSensor(coordinator, entry, desc, idx))
 
-    if coordinator.data.get(KEY_GPS) is not None:
+    # GPS sensors are always added when the endpoint is reachable,
+    # even without a satellite fix (values will be None until fix acquired)
+    gps_data = coordinator.data.get(KEY_GPS)
+    if gps_data is not None:
         for desc in GPS_SENSORS:
             entities.append(_GpsSensor(coordinator, entry, desc))
 

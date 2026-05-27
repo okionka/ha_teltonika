@@ -68,8 +68,15 @@ class TeltonikaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # GPS
         try:
             data[KEY_GPS] = await self.client.get_gps_status()
+            if data[KEY_GPS] is not None:
+                _LOGGER.debug(
+                    "GPS response: fix=%s lat=%s lon=%s",
+                    getattr(data[KEY_GPS], "fix", "?"),
+                    getattr(data[KEY_GPS], "latitude", "?"),
+                    getattr(data[KEY_GPS], "longitude", "?"),
+                )
         except Exception as err:
-            _LOGGER.debug("GPS: %s", err)
+            _LOGGER.warning("GPS unavailable: %s", err)
             data[KEY_GPS] = None
 
         # WAN
