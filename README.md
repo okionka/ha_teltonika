@@ -1,27 +1,41 @@
 # ha_teltonika
 
-Home Assistant custom component for Teltonika routers (RUTX50 etc.)  
-Extended native integration using [okionka/teltasync](https://github.com/okionka/teltasync).
+![Teltonika Extended](icon.png)
+
+Home Assistant custom integration for **Teltonika routers**.  
+Tested with **RUTX50** — other RutOS devices (RUT, RUTX, TRB series) should work too.
+
+Uses [okionka/teltasync](https://github.com/okionka/teltasync) — extended fork with GPS, WAN and data-usage support.
 
 ## Sensors
 
-| Gruppe | Sensoren |
+| Group | Sensors |
 |---|---|
-| **System** | Hostname, Firmware, Seriennummer, Modell, LAN MAC, Gerätename |
-| **Mobil** | RSSI, RSRP, RSRQ, SINR, Temperatur, Operator, Netztyp, Verbindungsstatus, IMSI, ICCID, IMEI, Cell-ID, Band, SIM-Status, aktive SIM, Mobile-Stage |
+| **System** | Hostname, Firmware, Serial number, Model, LAN MAC, Device name |
+| **Mobile** | RSSI, RSRP, RSRQ, SINR, Temperature, Operator, Network type, Connection state, IMSI, ICCID, IMEI, Cell-ID, Band, SIM state, Active SIM, Mobile stage |
 | **GPS** | Latitude, Longitude, Altitude, Speed, Satellites, Accuracy, Fix, Datetime |
-| **WAN** | IP-Adresse, WAN-Typ, Interface |
-| **Datenvolumen SIM1/SIM2** | heute / letzte 24h / diese Woche / letzte 7 Tage / diesen Monat / letzte 30 Tage / letzten Monat / letzte Woche |
+| **WAN** | IP address, WAN type, Interface |
+| **Data usage SIM1/SIM2** | today / last 24h / this week / last 7 days / this month / last 30 days / last month / last week |
 
-## Installation
+GPS, WAN and data-usage sensors only appear when the corresponding API endpoints are available on the device firmware (auto-detected).
 
-1. In `/config/custom_components/` den Ordner `teltonika_extended/` kopieren
-2. HA neu starten
-3. **Einstellungen → Geräte & Dienste → Teltonika Extended hinzufügen**
+## Installation via HACS
 
-## Hinweise
+1. HACS → **Custom repositories** → `https://github.com/okionka/ha_teltonika` → Category: **Integration**
+2. Install **Teltonika Extended**
+3. Restart Home Assistant
+4. **Settings → Devices & Services → Add Integration → Teltonika Extended**
+5. Enter IP address (e.g. `192.168.7.1`), username and password
 
-- GPS-, WAN- und Datenvolumen-Sensoren erscheinen nur wenn die API-Endpunkte 
-  auf der Firmware verfügbar sind (automatische Erkennung)
-- Kann parallel zur Modbus YAML betrieben werden
-- Polling-Intervall: 30 Sekunden
+## Tested hardware
+
+| Device | Firmware | Status |
+|---|---|---|
+| RUTX50 | RutOS 7.x | ✅ Tested |
+| Other RutOS devices | 7.x | Should work |
+
+## Notes
+
+- Can run in parallel with the Modbus YAML integration
+- Polling interval: 30 seconds
+- Requires RutOS REST API enabled on the router (Services → API)
