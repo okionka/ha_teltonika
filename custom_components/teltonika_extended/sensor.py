@@ -27,7 +27,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, KEY_DATA_USAGE, KEY_GPS, KEY_MOBILE, KEY_SYSTEM, KEY_WAN
+from .const import DOMAIN, KEY_DATA_USAGE, KEY_FIRMWARE, KEY_GPS, KEY_MOBILE, KEY_SYSTEM, KEY_WAN
 from .coordinator import TeltonikaCoordinator
 
 
@@ -127,6 +127,35 @@ SYSTEM_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         icon="mdi:linux", group="system",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _a(d, "static", "kernel"),
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Firmware sensors (use KEY_FIRMWARE from coordinator)
+# ---------------------------------------------------------------------------
+FIRMWARE_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
+    TeltonikaSensorDesc(
+        key="fw_available", name="Firmware available",
+        icon="mdi:update", group="firmware",
+        value_fn=lambda d: _a(d, "update", "fw_version"),
+    ),
+    TeltonikaSensorDesc(
+        key="fw_build_date", name="Firmware build date",
+        icon="mdi:calendar-clock", group="firmware",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _a(d, "current", "build_date"),
+    ),
+    TeltonikaSensorDesc(
+        key="modem_fw", name="Modem firmware version",
+        icon="mdi:chip", group="firmware",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _a(d, "current", "modem_fw"),
+    ),
+    TeltonikaSensorDesc(
+        key="fw_raw", name="Firmware check raw response",
+        icon="mdi:code-json", group="firmware",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: str(d.model_dump(exclude_none=True))[:255] if d else None,
     ),
 )
 
@@ -408,6 +437,11 @@ async def async_setup_entry(
         for desc in GPS_SENSORS:
             entities.append(_GpsSensor(coordinator, entry, desc))
 
+    fw = coordinator.data.get(KEY_FIRMWARE)
+    if fw is not None:
+        for desc in FIRMWARE_SENSORS:
+            entities.append(_FirmwareSensor(coordinator, entry, desc))
+
     usage_list = coordinator.data.get(KEY_DATA_USAGE) or []
     for modem_usage in usage_list:
         for desc in ALL_USAGE:
@@ -472,6 +506,14 @@ class _GpsSensor(_Base):
     @property
     def native_value(self):
         return self.entity_description.value_fn(self.coordinator.data.get(KEY_GPS))
+
+
+class _FirmwareSensor(_Base):
+    @property
+    def native_value(self):
+        return self.entity_description.value_fn(
+            self.coordinator.data.get(KEY_FIRMWARE)
+        )
 
 
 class _UsageSensor(_Base):
