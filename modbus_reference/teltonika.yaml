@@ -1,0 +1,472 @@
+###############################################################################
+# Teltonika RUTX50 — Modbus TCP Integration
+# Reference: https://wiki.teltonika-networks.com/view/RUTX50_Monitoring_via_Modbus
+#
+# Place in:  /config/packages/teltonika.yaml
+# Requires:  modbus integration enabled in configuration.yaml:
+#              homeassistant:
+#                packages: !include_dir_named packages/
+###############################################################################
+
+modbus:
+  - name: "teltonika"
+    host: 192.168.7.1
+    type: tcp
+    port: 502
+    sensors:
+
+      # -----------------------------------------------------------------------
+      # System
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - System uptime"
+        slave: 1
+        address: 1
+        data_type: uint32
+        unit_of_measurement: "s"
+
+      - name: "Teltonika - Mobile signal strength"
+        slave: 1
+        address: 3
+        data_type: int32
+        unit_of_measurement: "dBm"
+
+      - name: "Teltonika - System temperature"
+        slave: 1
+        address: 5
+        data_type: int32
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: "°C"
+
+      - name: "Teltonika - System hostname"
+        slave: 1
+        address: 7
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - GSM operator name"
+        slave: 1
+        address: 23
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - Serial number"
+        slave: 1
+        address: 39
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - LAN MAC address"
+        slave: 1
+        address: 55
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - Device name"
+        slave: 1
+        address: 71
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - Active SIM card"
+        slave: 1
+        address: 87
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - Network registration info"
+        slave: 1
+        address: 103
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - Network type"
+        slave: 1
+        address: 119
+        count: 16
+        data_type: string
+
+      # -----------------------------------------------------------------------
+      # WAN / LAN
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - WAN IP address"
+        slave: 1
+        address: 139
+        data_type: uint32
+        # Raw value: 32-bit unsigned integer
+        # Use template sensor below for formatted dotted-decimal output
+
+      - name: "Teltonika - LAN IP"
+        slave: 1
+        address: 394
+        data_type: uint32
+        # Raw value: 32-bit unsigned integer
+        # Use template sensor below for formatted dotted-decimal output
+
+      # -----------------------------------------------------------------------
+      # GPS
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - GPS latitude"
+        unique_id: "teltonika_gps_latitude"
+        slave: 1
+        address: 143
+        data_type: float32
+        precision: 6
+
+      - name: "Teltonika - GPS longitude"
+        unique_id: "teltonika_gps_longitude"
+        slave: 1
+        address: 145
+        data_type: float32
+        precision: 6
+
+      - name: "Teltonika - GPS fix time"
+        slave: 1
+        address: 147
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - GPS date and time"
+        slave: 1
+        address: 163
+        count: 16
+        data_type: string
+
+      - name: "Teltonika - GPS speed"
+        slave: 1
+        address: 179
+        data_type: float32
+        precision: 1
+
+      - name: "Teltonika - GPS satellite count"
+        slave: 1
+        address: 181
+        data_type: uint32
+
+      - name: "Teltonika - GPS accuracy"
+        slave: 1
+        address: 183
+        data_type: float32
+        precision: 2
+
+      # -----------------------------------------------------------------------
+      # Mobile data — SIM1
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - SIM1 received today"
+        slave: 1
+        address: 185
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent today"
+        slave: 1
+        address: 187
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 received this week"
+        slave: 1
+        address: 189
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent this week"
+        slave: 1
+        address: 191
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 received this month"
+        slave: 1
+        address: 193
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent this month"
+        slave: 1
+        address: 195
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 received last 24h"
+        slave: 1
+        address: 197
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent last 24h"
+        slave: 1
+        address: 199
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 received last 7 days"
+        slave: 1
+        address: 292
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent last 7 days"
+        slave: 1
+        address: 294
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 received last 30 days"
+        slave: 1
+        address: 296
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent last 30 days"
+        slave: 1
+        address: 298
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 received last month"
+        slave: 1
+        address: 487
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent last month"
+        slave: 1
+        address: 491
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 received last week"
+        slave: 1
+        address: 503
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM1 sent last week"
+        slave: 1
+        address: 507
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      # -----------------------------------------------------------------------
+      # Mobile data — SIM2
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - SIM2 received today"
+        slave: 1
+        address: 300
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent today"
+        slave: 1
+        address: 302
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 received this week"
+        slave: 1
+        address: 304
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent this week"
+        slave: 1
+        address: 306
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 received this month"
+        slave: 1
+        address: 308
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent this month"
+        slave: 1
+        address: 310
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 received last 24h"
+        slave: 1
+        address: 312
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent last 24h"
+        slave: 1
+        address: 314
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 received last 7 days"
+        slave: 1
+        address: 316
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent last 7 days"
+        slave: 1
+        address: 318
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 received last 30 days"
+        slave: 1
+        address: 320
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent last 30 days"
+        slave: 1
+        address: 322
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 received last month"
+        slave: 1
+        address: 495
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent last month"
+        slave: 1
+        address: 499
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 received last week"
+        slave: 1
+        address: 511
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      - name: "Teltonika - SIM2 sent last week"
+        slave: 1
+        address: 515
+        data_type: uint32
+        unit_of_measurement: "MB"
+
+      # -----------------------------------------------------------------------
+      # Modem / SIM identification
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - Modem ID"
+        slave: 1
+        address: 328
+        count: 8
+        data_type: string
+
+      - name: "Teltonika - IMSI"
+        slave: 1
+        address: 348
+        count: 16
+        data_type: string
+
+      # -----------------------------------------------------------------------
+      # Time
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - Unix timestamp"
+        slave: 1
+        address: 364
+        data_type: uint32
+
+      - name: "Teltonika - Local ISO time"
+        slave: 1
+        address: 366
+        count: 12
+        data_type: string
+
+      - name: "Teltonika - UTC time"
+        slave: 1
+        address: 378
+        count: 12
+        data_type: string
+
+    # -------------------------------------------------------------------------
+    # Switches (writable Modbus holding registers)
+    # -------------------------------------------------------------------------
+    switches:
+      - name: "Teltonika WiFi Switch"
+        unique_id: "teltonika_wifi_switch"
+        slave: 1
+        address: 203
+        write_type: holdings
+        command_on: 1
+        command_off: 0
+
+      - name: "Teltonika MobileData Switch"
+        unique_id: "teltonika_mobiledata_switch"
+        slave: 1
+        address: 204
+        write_type: holdings
+        command_on: 1
+        command_off: 0
+
+      - name: "Teltonika SIM Card Toggle"
+        unique_id: "teltonika_sim_card_toggle"
+        slave: 1
+        address: 205
+        write_type: holdings
+        command_on: 2    # Switch to SIM2
+        command_off: 1   # Switch to SIM1
+
+      # Uncomment to enable router reboot via Modbus:
+      # - name: "Teltonika Router Reboot"
+      #   unique_id: "teltonika_router_reboot"
+      #   slave: 1
+      #   address: 206
+      #   write_type: holdings
+      #   command_on: 1
+      #   command_off: 0
+
+      - name: "Teltonika WiFi 2.4GHz Switch"
+        unique_id: "teltonika_wifi_24ghz_switch"
+        slave: 1
+        address: 390
+        write_type: holdings
+        command_on: 1
+        command_off: 0
+
+      - name: "Teltonika WiFi 5GHz Switch"
+        unique_id: "teltonika_wifi_5ghz_switch"
+        slave: 1
+        address: 391
+        write_type: holdings
+        command_on: 1
+        command_off: 0
+
+
+###############################################################################
+# Template sensors — post-process raw Modbus values
+###############################################################################
+template:
+  - sensor:
+      # -----------------------------------------------------------------------
+      # WAN IP — convert uint32 to dotted-decimal notation
+      # Raw value example: 178040762 → 10.156.175.186
+      # Note: Jinja2 does not support >> bitshift — use integer division
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - WAN IP address formatted"
+        unique_id: "teltonika_wan_ip_formatted"
+        icon: mdi:ip-network
+        state: >
+          {% set ip = states('sensor.teltonika_wan_ip_address') | int(0) %}
+          {% if ip > 0 %}
+            {{ (ip // 16777216) % 256 }}.{{ (ip // 65536) % 256 }}.{{ (ip // 256) % 256 }}.{{ ip % 256 }}
+          {% else %}
+            unavailable
+          {% endif %}
+
+      # -----------------------------------------------------------------------
+      # LAN IP — same conversion
+      # -----------------------------------------------------------------------
+      - name: "Teltonika - LAN IP formatted"
+        unique_id: "teltonika_lan_ip_formatted"
+        icon: mdi:ip-network-outline
+        state: >
+          {% set ip = states('sensor.teltonika_lan_ip') | int(0) %}
+          {% if ip > 0 %}
+            {{ (ip // 16777216) % 256 }}.{{ (ip // 65536) % 256 }}.{{ (ip // 256) % 256 }}.{{ ip % 256 }}
+          {% else %}
+            unavailable
+          {% endif %}
