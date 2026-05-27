@@ -1,40 +1,27 @@
 """Teltonika Extended integration."""
 from __future__ import annotations
-
 import logging
 import os
-from datetime import datetime
 
 import voluptuous as vol
 from teltasync import Teltasync
 
+from homeassistant.components.persistent_notification import async_create as notify_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.components.persistent_notification import async_create as notify_create
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
-from .const import (
-    BACKUP_DIR,
-    CONF_VERIFY_SSL,
-    DOMAIN,
-    SERVICE_BACKUP,
-    SERVICE_RESTORE,
-)
+from .const import BACKUP_DIR, CONF_VERIFY_SSL, DOMAIN, SERVICE_BACKUP, SERVICE_RESTORE
 from .coordinator import TeltonikaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON, Platform.UPDATE]
 
-RESTORE_SCHEMA = vol.Schema({
-    vol.Required("file_path"): cv.string,
-})
-
 
 def _normalize_url(host: str) -> str:
-    """Return full RutOS API base URL, e.g. https://192.168.7.1/api"""
     host = host.strip().rstrip("/")
     if not host.startswith(("http://", "https://")):
         host = f"https://{host}"
@@ -61,124 +48,123 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register services (once, domain-wide)
-    if not hass.services.has_service(DOMAIN, SERVICE_BACKUP):
+    if not hass.services.has_service(DOMAIN, SERVICE_RESTORE):
         _register_services(hass)
 
     return True
 
 
 def _register_services(hass: HomeAssistant) -> None:
-    """Register backup and restore services."""
 
-    async def _handle_backup(call: ServiceCall) -> None:
-        """Download router config and save to /config/teltonika_backups/."""
+    def _get_coordinator(call: ServiceCall) -> TeltonikaCoordinator:
         entry_id = call.data.get("entry_id")
-        # Pick first coordinator if no entry_id given
-        coordinators = list(hass.data.get(DOMAIN, {}).values())
-        if not coordinators:
-            _LOGGER.error("No Teltonika integration configured")
-            return
-        coordinator: TeltonikaCoordinator = (
-            hass.data[DOMAIN].get(entry_id, coordinators[0])
-            if entry_id else coordinators[0]
-        )
+        coords = list(hass.data.get(DOMAIN, {}).values())
+        if not coords:
+            raise RuntimeError("No Teltonika integration configured")
+        return hass.data[DOMAIN].get(entry_id, coords[0]) if entry_id else coords[0]
 
-        try:
-            data = await coordinator.client.export_config()
-        except Exception as err:
-            _LOGGER.error("Backup failed: %s", err)
-            notify_create(hass, 
-                f"Teltonika backup failed: {err}",
-                title="Teltonika Backup",
-                notification_id="teltonika_backup_error",
-            )
-            return
-
-        backup_dir = hass.config.path(BACKUP_DIR)
-        os.makedirs(backup_dir, exist_ok=True)
-
-        sys_info = coordinator.system_info
-        hostname = (
-            getattr(getattr(sys_info, "static", None), "hostname", None)
-            or "router"
-        )
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{hostname}_{timestamp}.tar.gz"
-        filepath = os.path.join(backup_dir, filename)
-
-        with open(filepath, "wb") as f:
-            f.write(data)
-
-        _LOGGER.info("Router config backed up to %s (%d bytes)", filepath, len(data))
-        notify_create(hass, 
-            f"Router configuration saved to:\n`/config/{BACKUP_DIR}/{filename}`\n\n"
-            f"Size: {len(data):,} bytes",
-            title="Teltonika Backup successful",
-            notification_id="teltonika_backup_ok",
-        )
-
-    async def _handle_restore(call: ServiceCall) -> None:
-        """Upload a config backup file to the router."""
+    async def _handle_restore_upload(call: ServiceCall) -> None:
+        """
+        Restore flow step 1+2: upload + validate.
+        Shows metadata notification and instructs user to call restore_apply.
+        """
+        coordinator = _get_coordinator(call)
         file_path: str = call.data["file_path"]
-        entry_id = call.data.get("entry_id")
-        coordinators = list(hass.data.get(DOMAIN, {}).values())
-        if not coordinators:
-            _LOGGER.error("No Teltonika integration configured")
-            return
-        coordinator: TeltonikaCoordinator = (
-            hass.data[DOMAIN].get(entry_id, coordinators[0])
-            if entry_id else coordinators[0]
-        )
 
-        # Resolve relative paths against /config
         if not os.path.isabs(file_path):
             file_path = hass.config.path(file_path)
 
         if not os.path.exists(file_path):
-            _LOGGER.error("Restore file not found: %s", file_path)
-            notify_create(hass, 
-                f"File not found: `{file_path}`",
-                title="Teltonika Restore failed",
+            notify_create(
+                hass,
+                f"Datei nicht gefunden: `{file_path}`",
+                title="Teltonika Restore — Fehler",
                 notification_id="teltonika_restore_error",
             )
             return
 
-        with open(file_path, "rb") as f:
-            data = f.read()
+        data = await hass.async_add_executor_job(
+            lambda: open(file_path, "rb").read()
+        )
+
+        notify_create(
+            hass,
+            f"Backup wird hochgeladen und validiert…\n`{file_path}`",
+            title="Teltonika Restore",
+            notification_id="teltonika_restore_progress",
+        )
 
         try:
-            ok = await coordinator.client.import_config(data)
+            meta = await coordinator.client.restore_upload_validate(data)
         except Exception as err:
-            _LOGGER.error("Restore failed: %s", err)
-            notify_create(hass, 
-                f"Restore failed: {err}",
-                title="Teltonika Restore failed",
+            _LOGGER.error("Restore upload/validate failed: %s", err)
+            notify_create(
+                hass,
+                f"Upload/Validierung fehlgeschlagen:\n`{err}`",
+                title="Teltonika Restore — Fehler",
+                notification_id="teltonika_restore_error",
+            )
+            return
+
+        summary = meta.summary()
+        valid_str = "✅ Gültig" if meta.valid else ("❌ Ungültig" if meta.valid is False else "⚠️ Unbekannt")
+
+        notify_create(
+            hass,
+            f"**Backup-Metadaten:**\n{summary}\n\n"
+            f"**Status:** {valid_str}\n\n"
+            f"Zum Wiederherstellen:\n"
+            f"Service `teltonika_extended.restore_config_apply` aufrufen.\n\n"
+            f"⚠️ Der Router wird nach dem Restore neu gestartet.",
+            title="Teltonika Restore — Bestätigung erforderlich",
+            notification_id="teltonika_restore_confirm",
+        )
+
+    async def _handle_restore_apply(call: ServiceCall) -> None:
+        """Restore flow step 3: apply validated backup (router reboots)."""
+        coordinator = _get_coordinator(call)
+
+        notify_create(
+            hass,
+            "Restore wird angewendet — Router startet neu…",
+            title="Teltonika Restore",
+            notification_id="teltonika_restore_progress",
+        )
+
+        try:
+            ok = await coordinator.client.restore_apply()
+        except Exception as err:
+            _LOGGER.error("Restore apply failed: %s", err)
+            notify_create(
+                hass,
+                f"Restore fehlgeschlagen:\n`{err}`",
+                title="Teltonika Restore — Fehler",
                 notification_id="teltonika_restore_error",
             )
             return
 
         if ok:
-            _LOGGER.info("Router config restored from %s", file_path)
-            notify_create(hass, 
-                f"Configuration restored from:\n`{file_path}`\n\n"
-                "The router is rebooting to apply settings.",
-                title="Teltonika Restore successful",
+            _LOGGER.info("Restore applied — router rebooting")
+            notify_create(
+                hass,
+                "Router-Konfiguration wurde wiederhergestellt.\n"
+                "Der Router startet neu. Bitte 1–2 Minuten warten.",
+                title="Teltonika Restore erfolgreich",
                 notification_id="teltonika_restore_ok",
             )
-        else:
-            _LOGGER.error("Router rejected restore from %s", file_path)
 
     hass.services.async_register(
-        DOMAIN, SERVICE_BACKUP, _handle_backup,
-        schema=vol.Schema({vol.Optional("entry_id"): cv.string}),
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_RESTORE, _handle_restore,
+        DOMAIN, SERVICE_RESTORE,
+        _handle_restore_upload,
         schema=vol.Schema({
             vol.Required("file_path"): cv.string,
             vol.Optional("entry_id"): cv.string,
         }),
+    )
+    hass.services.async_register(
+        DOMAIN, "restore_config_apply",
+        _handle_restore_apply,
+        schema=vol.Schema({vol.Optional("entry_id"): cv.string}),
     )
 
 
@@ -186,8 +172,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-        # Remove services when last entry is unloaded
         if not hass.data.get(DOMAIN):
-            hass.services.async_remove(DOMAIN, SERVICE_BACKUP)
             hass.services.async_remove(DOMAIN, SERVICE_RESTORE)
+            hass.services.async_remove(DOMAIN, "restore_config_apply")
     return ok

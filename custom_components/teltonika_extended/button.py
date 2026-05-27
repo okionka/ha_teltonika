@@ -76,7 +76,13 @@ class RebootButton(_ButtonBase):
 
 
 class BackupButton(_ButtonBase):
-    """Saves router configuration to /config/teltonika_backups/ on press."""
+    """
+    Backup flow:
+      1. POST /backup/actions/generate
+      2. GET  /backup/errors/status  (poll until done)
+      3. GET  /backup/actions/download
+      → save to /config/teltonika_backups/<hostname>_<timestamp>.tar.gz
+    """
     _attr_name = "Backup configuration"
     _attr_icon = "mdi:content-save-all"
     _attr_entity_category = EntityCategory.CONFIG
@@ -89,26 +95,28 @@ class BackupButton(_ButtonBase):
         coordinator = self.coordinator
         hass = self._hass
 
+        notify_create(
+            hass,
+            "Backup wird erstellt…",
+            title="Teltonika Backup",
+            notification_id="teltonika_backup_progress",
+        )
+
         try:
             data = await coordinator.client.export_config()
-        except PermissionError as err:
-            _LOGGER.error("Backup permission denied: %s", err)
+        except TimeoutError:
             notify_create(
                 hass,
-                f"**Backup fehlgeschlagen — Keine Berechtigung**\n\n"
-                f"{err}\n\n"
-                f"**Lösung:** Im Router-WebUI unter\n"
-                f"*System → Verwaltung → Benutzer*\n"
-                f"die Rolle des API-Benutzers auf **admin** setzen.",
-                title="Teltonika Backup — Zugriff verweigert",
-                notification_id="teltonika_backup_403",
+                "Backup-Erstellung hat zu lange gedauert (>60s). Bitte erneut versuchen.",
+                title="Teltonika Backup — Timeout",
+                notification_id="teltonika_backup_error",
             )
             return
         except Exception as err:
             _LOGGER.error("Backup failed: %s", err)
             notify_create(
                 hass,
-                f"Backup fehlgeschlagen:\n{err}",
+                f"Backup fehlgeschlagen:\n`{err}`",
                 title="Teltonika Backup Fehler",
                 notification_id="teltonika_backup_error",
             )
@@ -131,7 +139,9 @@ class BackupButton(_ButtonBase):
             hass,
             f"Konfiguration gespeichert:\n"
             f"`/config/{BACKUP_DIR}/{filename}`\n\n"
-            f"Größe: {len(data):,} Bytes",
+            f"Größe: {len(data):,} Bytes\n\n"
+            f"Wiederherstellen: Service `teltonika_extended.restore_config`\n"
+            f"mit `file_path: {BACKUP_DIR}/{filename}`",
             title="Teltonika Backup erfolgreich",
             notification_id="teltonika_backup_ok",
         )

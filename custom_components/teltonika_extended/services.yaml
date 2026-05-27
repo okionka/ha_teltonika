@@ -1,34 +1,34 @@
-backup_config:
-  name: Backup router configuration
-  description: >
-    Downloads the router configuration and saves it to
-    /config/teltonika_backups/<hostname>_<timestamp>.tar.gz
-  fields:
-    entry_id:
-      name: Integration entry ID
-      description: Optional. Use when multiple Teltonika routers are configured.
-      required: false
-      selector:
-        text:
-
 restore_config:
-  name: Restore router configuration
+  name: Restore router configuration (Upload & Validate)
   description: >
-    Uploads a configuration backup file to the router.
-    The router will reboot to apply the restored settings.
+    Schritt 1+2: Lädt eine Backup-Datei auf den Router hoch und validiert sie.
+    Zeigt eine HA-Benachrichtigung mit den Backup-Metadaten.
+    Zum Abschließen: teltonika_extended.restore_config_apply aufrufen.
   fields:
     file_path:
-      name: Backup file path
+      name: Backup-Datei
       description: >
-        Path to the backup file, e.g.
-        teltonika_backups/RUTX50_20250527_120000.tar.gz
-        (relative to /config) or an absolute path.
+        Pfad zur Backup-Datei (relativ zu /config oder absolut).
+        Beispiel: teltonika_backups/RUTX50_20260527_120000.tar.gz
       required: true
       selector:
         text:
     entry_id:
-      name: Integration entry ID
-      description: Optional. Use when multiple Teltonika routers are configured.
+      name: Integration Entry ID
+      description: Optional bei mehreren Teltonika-Routern.
+      required: false
+      selector:
+        text:
+
+restore_config_apply:
+  name: Restore router configuration (Apply)
+  description: >
+    Schritt 3: Wendet das zuvor hochgeladene und validierte Backup an.
+    ⚠️ Der Router wird danach neu gestartet.
+  fields:
+    entry_id:
+      name: Integration Entry ID
+      description: Optional bei mehreren Teltonika-Routern.
       required: false
       selector:
         text:
