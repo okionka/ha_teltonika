@@ -53,47 +53,43 @@ def _fmt_mac(raw: str | None) -> str | None:
     return ":".join(clean[i:i+2] for i in range(0, 12, 2))
 
 
-def _parse_gps_datetime(raw) -> "datetime | None":
-    """Parse GPS datetime to timezone-aware datetime (UTC).
+def _fmt_gps_utc(raw) -> str | None:
+    """Format GPS datetime value as UTC string: '2026-05-27 12:09:57 UTC'.
 
-    Handles:
-    - Unix timestamp int/float: 1779883797
-    - Unix timestamp string:    "1779883797"
-    - ISO string:               "2026-05-27T12:09:57Z"
-    - Space-separated string:   "2026-05-27 12:09:57"
-    Always returns datetime (UTC) or None — never a raw string.
+    Accepts Unix timestamp (int/float/str) or ISO datetime string.
+    Returns None for missing/invalid values.
+    History logging is suppressed by default (sensor disabled per default).
     """
     from datetime import datetime as _dt
     if raw is None or raw == "" or raw in ("N/A", "unknown", "n/a"):
         return None
-    # Unix timestamp (int, float, or numeric string)
+    # Unix timestamp
     try:
         ts = float(raw)
-        if ts > 1_000_000_000:  # sanity: plausible unix timestamp
-            return _dt.fromtimestamp(ts, tz=timezone.utc)
+        if ts > 1_000_000_000:
+            return _dt.fromtimestamp(ts, tz=timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S UTC"
+            )
     except (ValueError, TypeError, OSError):
         pass
-    # ISO / formatted string
+    # String formats
     try:
         if _HAS_DATEUTIL:
             dt = dateutil_parser.parse(str(raw))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            return dt
+            return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     except Exception:
         pass
     for fmt in (
-        "%Y-%m-%dT%H:%M:%SZ",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d %H:%M:%S",
-        "%d.%m.%Y %H:%M:%S",
-        "%Y%m%d%H%M%S",
+        "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S", "%d.%m.%Y %H:%M:%S",
     ):
         try:
-            return _dt.strptime(str(raw), fmt).replace(tzinfo=timezone.utc)
+            return _dt.strptime(str(raw), fmt).strftime("%Y-%m-%d %H:%M:%S UTC")
         except ValueError:
             continue
-    return None  # NEVER return a raw string — HA TIMESTAMP requires datetime or None
+    return None
 
 
 def _fmt_signal(raw: int | None, unit: str) -> str | None:
@@ -166,12 +162,6 @@ SYSTEM_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         key="lan_ip", name="LAN IP address",
         icon="mdi:ip-network-outline", group="system",
         value_fn=lambda d: _a(d, "board", "network", "lan", "default_ip"),
-    ),
-    TeltonikaSensorDesc(
-        key="fw_build_date", name="Firmware build date",
-        icon="mdi:calendar-clock", group="system",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d: _a(d, "static", "fw_build_date"),
     ),
     TeltonikaSensorDesc(
         key="kernel_version", name="Kernel version",
@@ -402,11 +392,12 @@ GPS_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         value_fn=lambda d: _a(d, "accuracy"),
     ),
     TeltonikaSensorDesc(
-        key="datetime", name="GPS datetime",
-        device_class=SensorDeviceClass.TIMESTAMP,
+        key="datetime", name="GPS datetime (UTC)",
+        icon="mdi:clock-time-four-outline",
         group="gps",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d: _parse_gps_datetime(
+        # Disabled by default — enables history logging when turned on
+        value_fn=lambda d: _fmt_gps_utc(
             _a(d, "datetime") or _a(d, "date")
         ),
     ),
@@ -477,12 +468,16 @@ async def async_setup_entry(
             for desc in MOBILE_SENSORS:
                 entities.append(_ModemSensor(coordinator, entry, desc, idx))
 
-    # GPS sensors are always added when the endpoint is reachable,
-    # even without a satellite fix (values will be None until fix acquired)
+    # GPS sensors are always added when the endpoint is reachable.
+    # GPS datetime is disabled by default to prevent activity log spam.
     gps_data = coordinator.data.get(KEY_GPS)
     if gps_data is not None:
         for desc in GPS_SENSORS:
-            entities.append(_GpsSensor(coordinator, entry, desc))
+            entity = _GpsSensor(coordinator, entry, desc)
+            # Disable datetime sensor by default (enable manually for debugging)
+            if desc.key == "datetime":
+                entity._attr_entity_registry_enabled_default = False
+            entities.append(entity)
 
     fw = coordinator.data.get(KEY_FIRMWARE)
     if fw is not None:
