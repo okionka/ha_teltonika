@@ -11,7 +11,22 @@
         }
       }
     },
-    "error": { "cannot_connect": "Verbindung fehlgeschlagen." },
-    "abort": { "already_configured": "Router bereits konfiguriert." }
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen."
+    },
+    "abort": {
+      "already_configured": "Router bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Teltonika Extended Einstellungen",
+        "data": {
+          "max_backups": "Maximale Anzahl gespeicherter Backups (1–50)"
+        },
+        "description": "Älteste Backups werden beim Erstellen eines neuen automatisch gelöscht."
+      }
+    }
   }
 }

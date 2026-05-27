@@ -27,3 +27,6 @@ SERVICE_RESTORE = "restore_config"
 BACKUP_DIR = "teltonika_backups"
 
 KEY_INTERFACES = "interfaces"
+
+CONF_MAX_BACKUPS = "max_backups"
+DEFAULT_MAX_BACKUPS = 5

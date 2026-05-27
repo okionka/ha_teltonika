@@ -1,17 +1,22 @@
-"""Config flow for Teltonika Extended."""
+"""Config flow + Options flow for Teltonika Extended."""
 from __future__ import annotations
-
 import logging
 from typing import Any
 
 import voluptuous as vol
 from teltasync import Teltasync
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_VERIFY_SSL, DOMAIN
+from .const import (
+    CONF_MAX_BACKUPS,
+    CONF_VERIFY_SSL,
+    DEFAULT_MAX_BACKUPS,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,11 +29,9 @@ SCHEMA = vol.Schema({
 
 
 def _normalize_url(host: str) -> str:
-    """Ensure host is a full RutOS API base URL, e.g. https://192.168.7.1/api"""
     host = host.strip().rstrip("/")
     if not host.startswith(("http://", "https://")):
         host = f"https://{host}"
-    # RutOS REST API lives under /api — append if missing
     if not host.endswith("/api"):
         host = f"{host}/api"
     return host
@@ -36,6 +39,11 @@ def _normalize_url(host: str) -> str:
 
 class TeltonikaExtendedConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry) -> "TeltonikaOptionsFlow":
+        return TeltonikaOptionsFlow(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -70,14 +78,37 @@ class TeltonikaExtendedConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 return self.async_create_entry(
                     title=f"Teltonika {title}",
-                    data={
-                        CONF_HOST: base_url,
-                        CONF_USERNAME: user_input[CONF_USERNAME],
-                        CONF_PASSWORD: user_input[CONF_PASSWORD],
-                        CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
-                    },
+                    data={**user_input, CONF_HOST: base_url},
                 )
 
         return self.async_show_form(
             step_id="user", data_schema=SCHEMA, errors=errors
+        )
+
+
+class TeltonikaOptionsFlow(OptionsFlow):
+    """Options flow — configure max backup versions."""
+
+    def __init__(self, config_entry) -> None:
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_max = self._config_entry.options.get(
+            CONF_MAX_BACKUPS, DEFAULT_MAX_BACKUPS
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required(CONF_MAX_BACKUPS, default=current_max): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=50)
+                ),
+            }),
+            description_placeholders={
+                "current": str(current_max),
+            },
         )

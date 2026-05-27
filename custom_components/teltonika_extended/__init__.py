@@ -18,7 +18,7 @@ from .coordinator import TeltonikaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON, Platform.UPDATE]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON, Platform.UPDATE, Platform.SELECT]
 
 
 def _normalize_url(host: str) -> str:
