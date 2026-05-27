@@ -110,12 +110,7 @@ class BackupButton(_ButtonBase):
         )
 
         try:
-            await coordinator.client.export_config.__func__  # check method exists
-        except AttributeError:
-            pass
-
-        try:
-            # Generate backup on router
+            # Step 1: Generate backup on router
             await coordinator.client.backup.generate()
         except Exception as err:
             notify_dismiss(hass, "teltonika_backup_progress")
