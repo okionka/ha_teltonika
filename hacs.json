@@ -1,5 +1,6 @@
 {
   "name": "Teltonika Extended",
   "render_readme": true,
-  "homeassistant": "2024.1.0"
+  "homeassistant": "2024.1.0",
+  "icon": "https://raw.githubusercontent.com/okionka/ha_teltonika/main/icon.png"
 }
