@@ -42,8 +42,7 @@ async def async_setup_entry(
 class _ButtonBase(CoordinatorEntity[TeltonikaCoordinator], ButtonEntity):
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: TeltonikaCoordinator,
-                 entry: ConfigEntry, hass: HomeAssistant) -> None:
+    def __init__(self, coordinator, entry, hass):
         super().__init__(coordinator)
         self._hass = hass
         self._entry = entry
@@ -92,12 +91,25 @@ class BackupButton(_ButtonBase):
 
         try:
             data = await coordinator.client.export_config()
+        except PermissionError as err:
+            _LOGGER.error("Backup permission denied: %s", err)
+            notify_create(
+                hass,
+                f"**Backup fehlgeschlagen — Keine Berechtigung**\n\n"
+                f"{err}\n\n"
+                f"**Lösung:** Im Router-WebUI unter\n"
+                f"*System → Verwaltung → Benutzer*\n"
+                f"die Rolle des API-Benutzers auf **admin** setzen.",
+                title="Teltonika Backup — Zugriff verweigert",
+                notification_id="teltonika_backup_403",
+            )
+            return
         except Exception as err:
             _LOGGER.error("Backup failed: %s", err)
             notify_create(
                 hass,
                 f"Backup fehlgeschlagen:\n{err}",
-                title="Teltonika Backup",
+                title="Teltonika Backup Fehler",
                 notification_id="teltonika_backup_error",
             )
             return
@@ -110,16 +122,14 @@ class BackupButton(_ButtonBase):
         filename = f"{hostname}_{timestamp}.tar.gz"
         filepath = os.path.join(backup_dir, filename)
 
-        def _write() -> None:
-            with open(filepath, "wb") as f:
-                f.write(data)
-
-        await hass.async_add_executor_job(_write)
+        await hass.async_add_executor_job(
+            lambda: open(filepath, "wb").write(data)
+        )
 
         _LOGGER.info("Backup saved: %s (%d bytes)", filepath, len(data))
         notify_create(
             hass,
-            f"Konfiguration gespeichert unter:\n"
+            f"Konfiguration gespeichert:\n"
             f"`/config/{BACKUP_DIR}/{filename}`\n\n"
             f"Größe: {len(data):,} Bytes",
             title="Teltonika Backup erfolgreich",

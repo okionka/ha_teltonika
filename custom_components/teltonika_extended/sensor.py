@@ -108,6 +108,7 @@ class TeltonikaSensorDesc(SensorEntityDescription):
     value_fn: Callable[[Any], Any] = lambda _: None
     group: str = ""
     sim: int | None = None
+    enabled_default: bool = True  # set False to suppress activity logging
 
 
 def _a(obj: Any, *keys: str, default: Any = None) -> Any:
@@ -396,7 +397,7 @@ GPS_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         icon="mdi:clock-time-four-outline",
         group="gps",
         entity_category=EntityCategory.DIAGNOSTIC,
-        # Disabled by default — enables history logging when turned on
+        enabled_default=False,
         value_fn=lambda d: _fmt_gps_utc(
             _a(d, "datetime") or _a(d, "date")
         ),
@@ -468,16 +469,12 @@ async def async_setup_entry(
             for desc in MOBILE_SENSORS:
                 entities.append(_ModemSensor(coordinator, entry, desc, idx))
 
-    # GPS sensors are always added when the endpoint is reachable.
-    # GPS datetime is disabled by default to prevent activity log spam.
+    # GPS sensors: always added when endpoint reachable.
+    # GPS datetime is disabled by default (enabled_default=False in desc).
     gps_data = coordinator.data.get(KEY_GPS)
     if gps_data is not None:
         for desc in GPS_SENSORS:
-            entity = _GpsSensor(coordinator, entry, desc)
-            # Disable datetime sensor by default (enable manually for debugging)
-            if desc.key == "datetime":
-                entity._attr_entity_registry_enabled_default = False
-            entities.append(entity)
+            entities.append(_GpsSensor(coordinator, entry, desc))
 
     fw = coordinator.data.get(KEY_FIRMWARE)
     if fw is not None:
@@ -507,6 +504,7 @@ class _Base(CoordinatorEntity[TeltonikaCoordinator], SensorEntity):
         self.entity_description = description
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        self._attr_entity_registry_enabled_default = description.enabled_default
         sys = coordinator.system_info
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
