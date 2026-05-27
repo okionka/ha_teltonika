@@ -35,7 +35,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, KEY_DATA_USAGE, KEY_FIRMWARE, KEY_GPS, KEY_MOBILE, KEY_SYSTEM, KEY_WAN
+from .const import DOMAIN, KEY_BACKUP_STATUS, KEY_DATA_USAGE, KEY_FIRMWARE, KEY_GPS, KEY_MOBILE, KEY_SYSTEM, KEY_WAN
 from .coordinator import TeltonikaCoordinator
 
 
@@ -445,6 +445,38 @@ ALL_USAGE = _usage_sensors(1) + _usage_sensors(2)
 
 
 # ---------------------------------------------------------------------------
+# Backup status sensors
+# ---------------------------------------------------------------------------
+
+BACKUP_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
+    TeltonikaSensorDesc(
+        key="backup_status", name="Last backup status",
+        icon="mdi:backup-restore", group="backup",
+        value_fn=lambda d: _a(d, "status"),
+    ),
+    TeltonikaSensorDesc(
+        key="backup_file", name="Last backup file",
+        icon="mdi:file-archive", group="backup",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _a(d, "info"),
+    ),
+    TeltonikaSensorDesc(
+        key="backup_size", name="Last backup size",
+        icon="mdi:harddisk", group="backup",
+        native_unit_of_measurement="B",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _a(d, "size") or None,
+    ),
+    TeltonikaSensorDesc(
+        key="backup_timestamp", name="Last backup time",
+        icon="mdi:clock-check", group="backup",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _a(d, "timestamp"),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # async_setup_entry
 # ---------------------------------------------------------------------------
 
@@ -487,6 +519,15 @@ async def async_setup_entry(
             sim_data = getattr(modem_usage, f"sim{desc.sim}", None)
             if sim_data is not None:
                 entities.append(_UsageSensor(coordinator, entry, desc, modem_usage.modem_id))
+
+    backup_data = coordinator.data.get(KEY_BACKUP_STATUS)
+    if backup_data is not None:
+        for desc in BACKUP_SENSORS:
+            entities.append(_BackupSensor(coordinator, entry, desc))
+    else:
+        # Always add backup sensors (show "never" initially)
+        for desc in BACKUP_SENSORS:
+            entities.append(_BackupSensor(coordinator, entry, desc))
 
     async_add_entities(entities)
 
@@ -554,6 +595,14 @@ class _FirmwareSensor(_Base):
         return self.entity_description.value_fn(
             self.coordinator.data.get(KEY_FIRMWARE)
         )
+
+
+class _BackupSensor(_Base):
+    @property
+    def native_value(self):
+        data = self.coordinator.data.get(KEY_BACKUP_STATUS) or {}
+        val = self.entity_description.value_fn(data)
+        return val if val else None
 
 
 class _UsageSensor(_Base):

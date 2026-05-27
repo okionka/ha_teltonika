@@ -17,6 +17,7 @@ KEY_WAN        = "wan"
 KEY_DATA_USAGE = "data_usage"
 KEY_WIRELESS   = "wireless"
 KEY_FIRMWARE   = "firmware"
+KEY_BACKUP_STATUS = "backup_status"
 
 # Service names
 SERVICE_BACKUP  = "backup_config"

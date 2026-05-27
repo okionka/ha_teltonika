@@ -10,11 +10,13 @@ from teltasync.modems import ModemStatusFull
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    KEY_BACKUP_STATUS,
     KEY_DATA_USAGE,
     KEY_FIRMWARE,
     KEY_GPS,
@@ -40,8 +42,12 @@ class TeltonikaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self.host = host
         self.system_info = None
+        self._backup_store = Store(hass, 1, f"{DOMAIN}_{host}_backup_status")
+        self._backup_status: dict = {}
 
     async def _async_setup(self) -> None:
+        # Load persisted backup status
+        self._backup_status = await self._backup_store.async_load() or {}
         try:
             self.system_info = await self.client.get_system_info()
         except Exception as err:
@@ -111,5 +117,8 @@ class TeltonikaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 except Exception as err:
                     _LOGGER.debug("Data usage modem %s: %s", modem.id, err)
         data[KEY_DATA_USAGE] = usage_list or None
+
+        # Backup status from persistent storage (updated by BackupButton)
+        data[KEY_BACKUP_STATUS] = self._backup_status
 
         return data
