@@ -53,27 +53,47 @@ def _fmt_mac(raw: str | None) -> str | None:
     return ":".join(clean[i:i+2] for i in range(0, 12, 2))
 
 
-def _parse_gps_datetime(raw: str | None):
-    """Parse GPS datetime string to timezone-aware datetime (UTC)."""
-    if not raw or raw in ("N/A", "unknown", ""):
+def _parse_gps_datetime(raw) -> "datetime | None":
+    """Parse GPS datetime to timezone-aware datetime (UTC).
+
+    Handles:
+    - Unix timestamp int/float: 1779883797
+    - Unix timestamp string:    "1779883797"
+    - ISO string:               "2026-05-27T12:09:57Z"
+    - Space-separated string:   "2026-05-27 12:09:57"
+    Always returns datetime (UTC) or None — never a raw string.
+    """
+    from datetime import datetime as _dt
+    if raw is None or raw == "" or raw in ("N/A", "unknown", "n/a"):
         return None
+    # Unix timestamp (int, float, or numeric string)
+    try:
+        ts = float(raw)
+        if ts > 1_000_000_000:  # sanity: plausible unix timestamp
+            return _dt.fromtimestamp(ts, tz=timezone.utc)
+    except (ValueError, TypeError, OSError):
+        pass
+    # ISO / formatted string
     try:
         if _HAS_DATEUTIL:
-            dt = dateutil_parser.parse(raw)
+            dt = dateutil_parser.parse(str(raw))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             return dt
-        # Fallback: try common GPS formats
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%SZ",
-                    "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M:%S"):
-            try:
-                from datetime import datetime as _dt
-                return _dt.strptime(raw, fmt).replace(tzinfo=timezone.utc)
-            except ValueError:
-                continue
     except Exception:
         pass
-    return raw  # return raw string as fallback
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%d.%m.%Y %H:%M:%S",
+        "%Y%m%d%H%M%S",
+    ):
+        try:
+            return _dt.strptime(str(raw), fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None  # NEVER return a raw string — HA TIMESTAMP requires datetime or None
 
 
 def _fmt_signal(raw: int | None, unit: str) -> str | None:
