@@ -2,69 +2,108 @@
 
 ![Teltonika Extended](icon.png)
 
-Home Assistant custom integration for **Teltonika routers**.  
-Tested with **RUTX50** — other RutOS devices (RUT, RUTX, TRB series) should work too.
+Home Assistant custom integration für **Teltonika-Router**.  
+Getestet mit **RUTX50** — andere RutOS-Geräte (RUT, RUTX, TRB-Serie) sollten ebenfalls funktionieren.
 
-Uses [okionka/teltasync](https://github.com/okionka/teltasync) — extended fork with GPS, WAN, data-usage, firmware and backup support.
+Verwendet [okionka/teltasync](https://github.com/okionka/teltasync) — erweiterter Fork mit GPS, WAN, Datennvolumen, Firmware und Backup.
 
-> 📖 **RutOS API reference:** [developers.teltonika-networks.com](https://developers.teltonika-networks.com)
+> 📖 **RutOS API-Referenz:** [developers.teltonika-networks.com](https://developers.teltonika-networks.com)  
+> 📖 **Modbus TCP Referenz:** [README_MODBUS.md](README_MODBUS.md)  
+> 📖 **Marken-PR:** [homeassistant/brands #10388](https://github.com/home-assistant/brands/pull/10388)
 
-## Sensors
+---
 
-| Group | Sensors |
+## Sensoren
+
+| Gruppe | Sensoren |
 |---|---|
-| **System** | Hostname, LAN IP, LAN MAC *(formatted)*, Firmware `DIAG`, Model `DIAG`, Serial `DIAG`, Device name `DIAG` |
-| **WAN** | WAN IP address, WAN type `DIAG`, WAN interface `DIAG` |
-| **Mobile** | RSSI, RSRP, RSRQ, SINR, Temperature, Operator, Network type, Connection state, Active SIM, SIM state `DIAG`, IMSI `DIAG`, ICCID `DIAG`, IMEI `DIAG`, Cell-ID `DIAG`, Band `DIAG`, Network registration `DIAG`, Mobile stage `DIAG` |
-| **GPS** | Latitude, Longitude, Altitude, Speed, Fix, Satellites `DIAG`, Accuracy `DIAG`, Datetime `DIAG` |
-| **Data usage SIM1/SIM2** | today / last 24h / this week / last 7 days / this month / last 30 days / last month / last week |
+| **System** | Hostname, WAN IP, LAN IP, LAN MAC, Firmware, Modell, Seriennummer `DIAG`, Gerätename `DIAG`, Firmware Build-Datum `DIAG`, Kernel-Version `DIAG` |
+| **Mobil** | RSSI, RSRP, RSRQ, SINR, Temperatur, Operator, Netztyp, Verbindungsstatus, Aktive SIM, SIM-Status `DIAG`, IMSI `DIAG`, ICCID `DIAG`, IMEI `DIAG`, Cell-ID `DIAG`, Band `DIAG`, Netzregistrierung `DIAG`, Mobile-Stage `DIAG` |
+| **GPS** | Latitude, Longitude, Altitude, Speed, Fix, Satellites `DIAG`, Accuracy `DIAG`, Datetime `DIAG` *(deaktiviert per Default)* |
+| **WAN** | WAN IP (Interface), WAN-Typ `DIAG`, WAN-Interface `DIAG` |
+| **Interface-Traffic** | WiFi 2.4 GHz rx/tx, WiFi 5 GHz rx/tx, Mobile-Interface rx/tx |
+| **Datenvolumen SIM1/SIM2** | heute / letzte 24h / diese Woche / letzte 7 Tage / diesen Monat / letzte 30 Tage / letzten Monat / letzte Woche |
+| **Firmware** | Firmware-Update-Entity, Modem-Firmware-Update-Entity, Firmware available `DIAG`, Firmware Build-Datum `DIAG`, Modem-Firmware `DIAG`, Firmware-Check-Response `DIAG` |
+| **Backup** | Last backup status, Last backup file `DIAG`, Last backup size `DIAG`, Last backup time `DIAG` |
 
-`DIAG` = tagged as **Diagnostic** (visible under the Diagnostics section in the device page)
+`DIAG` = als **Diagnose** markiert (ausgeklappt unter „Diagnose" auf der Geräteseite)
 
-## Controls
+---
 
-| Type | Entity | Description |
+## Steuerung
+
+| Typ | Entität | Beschreibung |
 |---|---|---|
-| 🔘 Button | **Reboot** | Reboots the router |
-| 🔀 Switch | **SIM card** | ON = SIM1, OFF = SIM2 |
-| 📶 Switch | **WiFi (2g/5g)** | Enable/disable per wireless interface |
-| 🔄 Update | **Firmware** | Shows installed vs. available firmware, triggers OTA update |
+| 🔘 Button | **Reboot** | Router neu starten |
+| 💾 Button | **Backup configuration** | Konfiguration sichern (→ `/config/teltonika_backups/`) |
+| 🔀 Switch | **SIM card (SIM1 = ON)** | EIN = SIM1 aktiv, AUS = SIM2 aktiv |
+| 📶 Switch | **WiFi 2.4 GHz** | 2,4-GHz-WLAN ein/aus |
+| 📶 Switch | **WiFi 5 GHz** | 5-GHz-WLAN ein/aus |
+| 🔄 Update | **Firmware** | Zeigt installierte vs. verfügbare Version, OTA-Install |
+| 🔄 Update | **Modem firmware** | Zeigt Modem-Firmware-Version |
+
+---
 
 ## Services
 
-### `teltonika_extended.backup_config`
-Downloads the router configuration and saves it to `/config/teltonika_backups/`.
-
-```yaml
-service: teltonika_extended.backup_config
-```
-
 ### `teltonika_extended.restore_config`
-Uploads a backup file to the router. The router reboots to apply it.
+Schritt 1+2: Backup hochladen + validieren → HA-Benachrichtigung mit Metadaten.
 
 ```yaml
 service: teltonika_extended.restore_config
 data:
-  file_path: teltonika_backups/RUTX50_20250527_120000.tar.gz
+  file_path: teltonika_backups/RUTX50_20260527_120000.tar.gz
 ```
+
+### `teltonika_extended.restore_config_apply`
+Schritt 3: Backup anwenden (Router startet neu).
+
+```yaml
+service: teltonika_extended.restore_config_apply
+```
+
+---
+
+## Backup-Ablauf
+
+Der Backup-Button führt folgende API-Aufrufe aus:
+
+```
+POST /backup/actions/generate  {"data": {}}
+  ← {success: true, data: {sha256: "...", md5: "..."}}
+
+POST /backup/actions/download  {"data": {"sha256": "..."}}
+  ← binary .tar.gz
+
+→ gespeichert in /config/teltonika_backups/<hostname>_<timestamp>.tar.gz
+→ SHA256 wird verifiziert
+```
+
+---
 
 ## Installation via HACS
 
-1. HACS → **Custom repositories** → `https://github.com/okionka/ha_teltonika` → Category: **Integration**
-2. Install **Teltonika Extended**
-3. Restart Home Assistant
-4. **Settings → Devices & Services → Add Integration → Teltonika Extended**
-5. Enter IP address (e.g. `192.168.7.1`), username and password
+1. HACS → **Benutzerdefinierte Repositories** → `https://github.com/okionka/ha_teltonika` → Kategorie: **Integration**
+2. **Teltonika Extended** installieren
+3. Home Assistant neu starten
+4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Teltonika Extended**
+5. IP-Adresse (z.B. `192.168.7.1`), Benutzername und Passwort eingeben
 
-## Tested hardware
+---
 
-| Device | Firmware | Status |
+## Getestete Hardware
+
+| Gerät | Firmware | Status |
 |---|---|---|
-| RUTX50 | RutOS 7.x | ✅ Tested |
-| Other RutOS devices | 7.x | Should work |
+| RUTX50 | RutOS 7.x | ✅ Getestet |
+| Andere RutOS-Geräte | 7.x | Sollte funktionieren |
 
-## Notes
+---
 
-- Can run in parallel with the Modbus YAML integration
-- Polling interval: 30 seconds
-- Requires RutOS REST API enabled: **Services → API**
+## Hinweise
+
+- Kann parallel zur [Modbus YAML-Integration](README_MODBUS.md) betrieben werden
+- Polling-Intervall: 30 Sekunden
+- Erfordert aktivierte RutOS REST API: **Dienste → API**
+- GPS-Datetime-Sensor ist per Default deaktiviert (verhindert Aktivitätslog-Spam)
+  → Aktivieren: Einstellungen → Entitäten → GPS datetime (UTC)
