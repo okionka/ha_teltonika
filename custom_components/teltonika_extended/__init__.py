@@ -11,7 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import CONF_VERIFY_SSL, DOMAIN
 from .coordinator import TeltonikaCoordinator
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH]
 
 
 def _normalize_url(host: str) -> str:
