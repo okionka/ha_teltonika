@@ -5,19 +5,48 @@
 Home Assistant custom integration for **Teltonika routers**.  
 Tested with **RUTX50** — other RutOS devices (RUT, RUTX, TRB series) should work too.
 
-Uses [okionka/teltasync](https://github.com/okionka/teltasync) — extended fork with GPS, WAN and data-usage support.
+Uses [okionka/teltasync](https://github.com/okionka/teltasync) — extended fork with GPS, WAN, data-usage, firmware and backup support.
+
+> 📖 **RutOS API reference:** [developers.teltonika-networks.com](https://developers.teltonika-networks.com)
 
 ## Sensors
 
 | Group | Sensors |
 |---|---|
-| **System** | Hostname, Firmware, Serial number, Model, LAN MAC, Device name |
-| **Mobile** | RSSI, RSRP, RSRQ, SINR, Temperature, Operator, Network type, Connection state, IMSI, ICCID, IMEI, Cell-ID, Band, SIM state, Active SIM, Mobile stage |
-| **GPS** | Latitude, Longitude, Altitude, Speed, Satellites, Accuracy, Fix, Datetime |
-| **WAN** | IP address, WAN type, Interface |
+| **System** | Hostname, LAN IP, LAN MAC *(formatted)*, Firmware `DIAG`, Model `DIAG`, Serial `DIAG`, Device name `DIAG` |
+| **WAN** | WAN IP address, WAN type `DIAG`, WAN interface `DIAG` |
+| **Mobile** | RSSI, RSRP, RSRQ, SINR, Temperature, Operator, Network type, Connection state, Active SIM, SIM state `DIAG`, IMSI `DIAG`, ICCID `DIAG`, IMEI `DIAG`, Cell-ID `DIAG`, Band `DIAG`, Network registration `DIAG`, Mobile stage `DIAG` |
+| **GPS** | Latitude, Longitude, Altitude, Speed, Fix, Satellites `DIAG`, Accuracy `DIAG`, Datetime `DIAG` |
 | **Data usage SIM1/SIM2** | today / last 24h / this week / last 7 days / this month / last 30 days / last month / last week |
 
-GPS, WAN and data-usage sensors only appear when the corresponding API endpoints are available on the device firmware (auto-detected).
+`DIAG` = tagged as **Diagnostic** (visible under the Diagnostics section in the device page)
+
+## Controls
+
+| Type | Entity | Description |
+|---|---|---|
+| 🔘 Button | **Reboot** | Reboots the router |
+| 🔀 Switch | **SIM card** | ON = SIM1, OFF = SIM2 |
+| 📶 Switch | **WiFi (2g/5g)** | Enable/disable per wireless interface |
+| 🔄 Update | **Firmware** | Shows installed vs. available firmware, triggers OTA update |
+
+## Services
+
+### `teltonika_extended.backup_config`
+Downloads the router configuration and saves it to `/config/teltonika_backups/`.
+
+```yaml
+service: teltonika_extended.backup_config
+```
+
+### `teltonika_extended.restore_config`
+Uploads a backup file to the router. The router reboots to apply it.
+
+```yaml
+service: teltonika_extended.restore_config
+data:
+  file_path: teltonika_backups/RUTX50_20250527_120000.tar.gz
+```
 
 ## Installation via HACS
 
@@ -38,4 +67,4 @@ GPS, WAN and data-usage sensors only appear when the corresponding API endpoints
 
 - Can run in parallel with the Modbus YAML integration
 - Polling interval: 30 seconds
-- Requires RutOS REST API enabled on the router (Services → API)
+- Requires RutOS REST API enabled: **Services → API**
