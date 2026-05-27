@@ -24,10 +24,13 @@ SCHEMA = vol.Schema({
 
 
 def _normalize_url(host: str) -> str:
-    """Ensure host is a full URL with scheme, e.g. https://192.168.7.1"""
+    """Ensure host is a full RutOS API base URL, e.g. https://192.168.7.1/api"""
     host = host.strip().rstrip("/")
     if not host.startswith(("http://", "https://")):
         host = f"https://{host}"
+    # RutOS REST API lives under /api — append if missing
+    if not host.endswith("/api"):
+        host = f"{host}/api"
     return host
 
 

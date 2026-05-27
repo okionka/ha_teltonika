@@ -15,9 +15,12 @@ PLATFORMS = [Platform.SENSOR]
 
 
 def _normalize_url(host: str) -> str:
+    """Return full RutOS API base URL, e.g. https://192.168.7.1/api"""
     host = host.strip().rstrip("/")
     if not host.startswith(("http://", "https://")):
         host = f"https://{host}"
+    if not host.endswith("/api"):
+        host = f"{host}/api"
     return host
 
 
