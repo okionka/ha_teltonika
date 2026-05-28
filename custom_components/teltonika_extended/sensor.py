@@ -36,7 +36,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, KEY_BACKUP_STATUS, KEY_DATA_USAGE, KEY_FIRMWARE, KEY_GPS, KEY_INTERFACES, KEY_MOBILE, KEY_SYSTEM, KEY_WAN
-from .coordinator import TeltonikaCoordinator
+from .coordinator import TeltonikaCoordinator, _base_url
 
 
 # ---------------------------------------------------------------------------

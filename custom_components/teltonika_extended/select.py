@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import BACKUP_DIR, DOMAIN
-from .coordinator import TeltonikaCoordinator
+from .coordinator import TeltonikaCoordinator, _base_url
 
 _LOGGER = logging.getLogger(__name__)
 

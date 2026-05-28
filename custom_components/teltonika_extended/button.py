@@ -19,7 +19,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import BACKUP_DIR, CONF_MAX_BACKUPS, DEFAULT_MAX_BACKUPS, DOMAIN
-from .coordinator import TeltonikaCoordinator
+from .coordinator import TeltonikaCoordinator, _base_url
 
 _LOGGER = logging.getLogger(__name__)
 _BACKUP_STORE_VERSION = 1
