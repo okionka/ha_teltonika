@@ -159,16 +159,12 @@ SYSTEM_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _fmt_mac(_a(d, "mnf_info", "mac")),
     ),
-    TeltonikaSensorDesc(
-        key="wan_ip", name="WAN IP address",
-        icon="mdi:ip-network", group="system",
-        value_fn=lambda d: _a(d, "board", "network", "wan", "default_ip"),
-    ),
-    TeltonikaSensorDesc(
-        key="lan_ip", name="LAN IP address",
-        icon="mdi:ip-network-outline", group="system",
-        value_fn=lambda d: _a(d, "board", "network", "lan", "default_ip"),
-    ),
+    # WAN IP and LAN IP are read from the interfaces list (KEY_INTERFACES)
+    # The static default_ip from system_info is unreliable (shows factory default)
+)
+
+# Sensors reading from KEY_INTERFACES (actual current network state)
+INTERFACE_IP_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
     TeltonikaSensorDesc(
         key="kernel_version", name="Kernel version",
         icon="mdi:linux", group="system",
@@ -176,6 +172,53 @@ SYSTEM_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
         value_fn=lambda d: _a(d, "static", "kernel"),
     ),
 )
+
+# ---------------------------------------------------------------------------
+# Current IP address sensors (from interfaces list — actual configured IPs)
+# ---------------------------------------------------------------------------
+
+_LAN_PREFIXES = ("br-lan", "lan", "eth", "bridge")
+_WAN_PREFIXES = ("mob", "wwan", "ppp", "lte")
+
+
+def _get_lan_ip(ifaces) -> str | None:
+    """Return IP of first up LAN interface (br-lan > lan > eth*)."""
+    if not ifaces:
+        return None
+    # Priority: br-lan first, then lan, then eth*
+    for prefix in ("br-lan", "lan", "eth"):
+        for i in ifaces:
+            name = getattr(i, "name", "") or ""
+            if name.startswith(prefix) and getattr(i, "ipaddr", None):
+                return i.ipaddr
+    return None
+
+
+def _get_wan_ip(ifaces) -> str | None:
+    """Return IP of first up WAN/mobile interface."""
+    if not ifaces:
+        return None
+    for i in ifaces:
+        name = getattr(i, "name", "") or ""
+        if (any(name.startswith(p) for p in _WAN_PREFIXES)
+                and getattr(i, "ipaddr", None)):
+            return i.ipaddr
+    return None
+
+
+INTERFACE_IP_SENSORS: tuple[TeltonikaSensorDesc, ...] = (
+    TeltonikaSensorDesc(
+        key="current_wan_ip", name="WAN IP address",
+        icon="mdi:ip-network", group="interfaces",
+        value_fn=lambda d: _get_wan_ip(d),
+    ),
+    TeltonikaSensorDesc(
+        key="current_lan_ip", name="LAN IP address",
+        icon="mdi:ip-network-outline", group="interfaces",
+        value_fn=lambda d: _get_lan_ip(d),
+    ),
+)
+
 
 # ---------------------------------------------------------------------------
 # Interface traffic sensors (WiFi + Mobile + WAN IP from interfaces)
@@ -562,8 +605,10 @@ async def async_setup_entry(
         for desc in GPS_SENSORS:
             entities.append(_GpsSensor(coordinator, entry, desc))
 
-    # Interface traffic sensors (WiFi, Mobile, WAN IP)
+    # IP address sensors from current interface state
     ifaces = coordinator.data.get(KEY_INTERFACES) or []
+    for desc in INTERFACE_IP_SENSORS:
+        entities.append(_InterfaceSensor(coordinator, entry, desc))
     for desc in STATIC_INTERFACE_SENSORS:
         entities.append(_InterfaceSensor(coordinator, entry, desc))
 
