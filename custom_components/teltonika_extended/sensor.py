@@ -677,7 +677,7 @@ class _Base(CoordinatorEntity[TeltonikaCoordinator], SensorEntity):
             manufacturer="Teltonika",
             model=_a(sys, "static", "model") if sys else None,
             sw_version=_a(sys, "static", "fw_version") if sys else None,
-            configuration_url=f"https://{coordinator.host}",
+            configuration_url=_base_url(coordinator.host),
         )
 
 

@@ -59,7 +59,7 @@ class _ButtonBase(CoordinatorEntity[TeltonikaCoordinator], ButtonEntity):
             manufacturer="Teltonika",
             model=_a(sys, "static", "model"),
             sw_version=_a(sys, "static", "fw_version"),
-            configuration_url=f"https://{coordinator.host}",
+            configuration_url=_base_url(coordinator.host),
         )
 
 

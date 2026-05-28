@@ -59,7 +59,7 @@ class BackupFileSelect(CoordinatorEntity[TeltonikaCoordinator], SelectEntity):
             manufacturer="Teltonika",
             model=_a(sys, "static", "model"),
             sw_version=_a(sys, "static", "fw_version"),
-            configuration_url=f"https://{coordinator.host}",
+            configuration_url=_base_url(coordinator.host),
         )
 
     async def async_added_to_hass(self) -> None:

@@ -30,6 +30,14 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _base_url(host: str) -> str:
+    """Strip /api suffix and return clean router base URL for browser links."""
+    url = host.rstrip("/")
+    if url.endswith("/api"):
+        url = url[:-4]
+    return url
+
+
 class TeltonikaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Fetches all data from the router every 30 s."""
 

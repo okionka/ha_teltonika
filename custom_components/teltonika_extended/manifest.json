@@ -1,10 +1,10 @@
 {
   "domain": "teltonika_extended",
   "name": "Teltonika Extended",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "documentation": "https://github.com/okionka/ha_teltonika",
   "requirements": [
-    "teltasync @ git+https://github.com/okionka/teltasync"
+    "teltasync @ git+https://github.com/okionka/teltasync@v0.4.0"
   ],
   "dependencies": [],
   "codeowners": [
