@@ -6,6 +6,7 @@ import os
 import voluptuous as vol
 from teltasync import Teltasync
 
+from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
 from homeassistant.components.persistent_notification import async_create as notify_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
@@ -30,6 +31,32 @@ def _normalize_url(host: str) -> str:
     return host
 
 
+def _panel_url_path(entry: ConfigEntry) -> str:
+    """Unique sidebar URL path per config entry."""
+    return f"teltonika_{entry.entry_id[:8].lower()}"
+
+
+def _register_panel(hass: HomeAssistant, entry: ConfigEntry, router_url: str) -> None:
+    """Add the router's web UI as a sidebar iframe panel."""
+    url_path = _panel_url_path(entry)
+    # Use device hostname as sidebar title if available
+    title = entry.title  # e.g. 'Teltonika RUTX50'
+
+    try:
+        async_register_built_in_panel(
+            hass,
+            component_name="iframe",
+            sidebar_title=title,
+            sidebar_icon="mdi:router-wireless",
+            frontend_url_path=url_path,
+            config={"url": router_url},
+            require_admin=False,
+        )
+        _LOGGER.info("Registered sidebar panel '%s' → %s", title, router_url)
+    except Exception as err:
+        _LOGGER.warning("Could not register sidebar panel: %s", err)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     base_url = _normalize_url(entry.data[CONF_HOST])
     verify_ssl = entry.data.get(CONF_VERIFY_SSL, False)
@@ -50,6 +77,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.services.has_service(DOMAIN, SERVICE_RESTORE):
         _register_services(hass)
+
+    # Register sidebar panel for this router's web UI
+    _register_panel(hass, entry, base_url)
 
     return True
 
@@ -175,4 +205,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not hass.data.get(DOMAIN):
             hass.services.async_remove(DOMAIN, SERVICE_RESTORE)
             hass.services.async_remove(DOMAIN, "restore_config_apply")
+        # Remove sidebar panel
+        try:
+            async_remove_panel(hass, _panel_url_path(entry))
+        except Exception:
+            pass
     return ok
