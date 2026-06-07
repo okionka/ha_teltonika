@@ -12,12 +12,10 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
-    CONF_MAX_BACKUPS,
-    CONF_SIDEBAR_PANEL,
-    CONF_VERIFY_SSL,
-    DEFAULT_MAX_BACKUPS,
-    DEFAULT_SIDEBAR_PANEL,
-    DOMAIN,
+    CONF_EXTERNAL_ICON, CONF_EXTERNAL_PANEL, CONF_EXTERNAL_TITLE, CONF_EXTERNAL_URL,
+    CONF_MAX_BACKUPS, CONF_SIDEBAR_PANEL, CONF_VERIFY_SSL,
+    DEFAULT_EXTERNAL_ICON, DEFAULT_EXTERNAL_PANEL,
+    DEFAULT_MAX_BACKUPS, DEFAULT_SIDEBAR_PANEL, DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -103,13 +101,24 @@ class TeltonikaOptionsFlow(OptionsFlow):
         current_max = self._config_entry.options.get(
             CONF_MAX_BACKUPS, DEFAULT_MAX_BACKUPS
         )
-        current_sidebar = self._config_entry.options.get(
-            CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL
-        )
+        opts = self._config_entry.options
+        current_sidebar  = opts.get(CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL)
+        current_ext      = opts.get(CONF_EXTERNAL_PANEL, DEFAULT_EXTERNAL_PANEL)
+        current_ext_url  = opts.get(CONF_EXTERNAL_URL, "")
+        current_ext_title= opts.get(CONF_EXTERNAL_TITLE, "")
+        current_ext_icon = opts.get(CONF_EXTERNAL_ICON, DEFAULT_EXTERNAL_ICON)
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
+                # Router WebUI proxy panel
                 vol.Required(CONF_SIDEBAR_PANEL, default=current_sidebar): bool,
+                # External URL panel
+                vol.Required(CONF_EXTERNAL_PANEL, default=current_ext): bool,
+                vol.Optional(CONF_EXTERNAL_URL,   default=current_ext_url):   str,
+                vol.Optional(CONF_EXTERNAL_TITLE, default=current_ext_title): str,
+                vol.Optional(CONF_EXTERNAL_ICON,  default=current_ext_icon):  str,
+                # Backup
                 vol.Required(CONF_MAX_BACKUPS, default=current_max): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=50)
                 ),

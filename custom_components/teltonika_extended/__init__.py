@@ -16,7 +16,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
-    BACKUP_DIR, CONF_SIDEBAR_PANEL, CONF_VERIFY_SSL,
+    BACKUP_DIR,
+    CONF_EXTERNAL_ICON, CONF_EXTERNAL_PANEL, CONF_EXTERNAL_TITLE, CONF_EXTERNAL_URL,
+    CONF_SIDEBAR_PANEL, CONF_VERIFY_SSL,
+    DEFAULT_EXTERNAL_ICON, DEFAULT_EXTERNAL_PANEL,
     DEFAULT_SIDEBAR_PANEL, DOMAIN, SERVICE_BACKUP, SERVICE_RESTORE,
 )
 from .coordinator import TeltonikaCoordinator
@@ -94,9 +97,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register reverse proxy view (once per HA instance)
     _register_proxy(hass)
 
-    # Register sidebar panel if enabled in options
+    # Register sidebar panel (router proxy) if enabled
     if entry.options.get(CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL):
         _register_panel(hass, entry)
+
+    # Register external URL panel if configured
+    if entry.options.get(CONF_EXTERNAL_PANEL, DEFAULT_EXTERNAL_PANEL):
+        _register_external_panel(hass, entry)
 
     # Re-register / remove panel when options change
     entry.async_on_unload(
@@ -220,16 +227,50 @@ def _register_services(hass: HomeAssistant) -> None:
     )
 
 
+def _register_external_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Add configurable external URL as a sidebar iframe panel."""
+    url = entry.options.get(CONF_EXTERNAL_URL, "").strip()
+    if not url:
+        _LOGGER.debug("External panel enabled but no URL configured")
+        return
+
+    title = entry.options.get(CONF_EXTERNAL_TITLE, "").strip() or "Router Ext"
+    icon  = entry.options.get(CONF_EXTERNAL_ICON, DEFAULT_EXTERNAL_ICON).strip()
+    path  = _panel_url_path(entry) + "_ext"
+
+    try:
+        async_register_built_in_panel(
+            hass,
+            component_name="iframe",
+            sidebar_title=title,
+            sidebar_icon=icon,
+            frontend_url_path=path,
+            config={"url": url},
+            require_admin=False,
+        )
+        _LOGGER.info("Registered external sidebar panel '%s' → %s", title, url)
+    except Exception as err:
+        _LOGGER.warning("Could not register external panel: %s", err)
+
+
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options update — toggle sidebar panel."""
-    sidebar_enabled = entry.options.get(CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL)
-    url_path = _panel_url_path(entry)
-    if sidebar_enabled:
+    """Handle options update — toggle sidebar panels."""
+    # Router proxy panel
+    if entry.options.get(CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL):
         _register_panel(hass, entry)
     else:
         try:
-            async_remove_panel(hass, url_path)
-            _LOGGER.info("Removed sidebar panel for %s", entry.title)
+            async_remove_panel(hass, _panel_url_path(entry))
+        except Exception:
+            pass
+
+    # External URL panel
+    ext_path = _panel_url_path(entry) + "_ext"
+    if entry.options.get(CONF_EXTERNAL_PANEL, DEFAULT_EXTERNAL_PANEL):
+        _register_external_panel(hass, entry)
+    else:
+        try:
+            async_remove_panel(hass, ext_path)
         except Exception:
             pass
 
@@ -241,9 +282,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not hass.data.get(DOMAIN):
             hass.services.async_remove(DOMAIN, SERVICE_RESTORE)
             hass.services.async_remove(DOMAIN, "restore_config_apply")
-        # Remove sidebar panel (if it was registered)
-        try:
-            async_remove_panel(hass, _panel_url_path(entry))
-        except Exception:
-            pass  # Panel may not have been registered if option was disabled
+        # Remove sidebar panels
+        for suffix in ("", "_ext"):
+            try:
+                async_remove_panel(hass, _panel_url_path(entry) + suffix)
+            except Exception:
+                pass
     return ok

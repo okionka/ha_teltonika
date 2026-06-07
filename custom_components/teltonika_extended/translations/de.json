@@ -22,11 +22,15 @@
     "step": {
       "init": {
         "title": "Teltonika Extended Einstellungen",
+        "description": "Sidebar-Panels und Backup-Einstellungen",
         "data": {
-          "sidebar_panel": "Router-WebUI in HA-Seitenleiste anzeigen (Reverse Proxy)",
+          "sidebar_panel": "Router-WebUI in Seitenleiste (Reverse Proxy)",
+          "external_panel": "Externe URL in Seitenleiste anzeigen",
+          "external_url": "Externe URL (z.B. https://vpn.example.com)",
+          "external_title": "Bezeichnung in der Seitenleiste",
+          "external_icon": "MDI Icon (z.B. mdi:web, mdi:vpn, mdi:monitor)",
           "max_backups": "Maximale Anzahl gespeicherter Backups (1–50)"
-        },
-        "description": "Der Sidebar-Eintrag öffnet das Router-WebUI über einen integrierten Reverse Proxy."
+        }
       }
     }
   }

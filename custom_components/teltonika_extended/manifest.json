@@ -1,7 +1,7 @@
 {
   "domain": "teltonika_extended",
   "name": "Teltonika Extended",
-  "version": "1.9.4",
+  "version": "1.9.5",
   "documentation": "https://github.com/okionka/ha_teltonika",
   "requirements": [
     "teltasync @ git+https://github.com/okionka/teltasync@v0.4.0"

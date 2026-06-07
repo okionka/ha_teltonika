@@ -33,3 +33,10 @@ DEFAULT_MAX_BACKUPS = 5
 
 CONF_SIDEBAR_PANEL = "sidebar_panel"
 DEFAULT_SIDEBAR_PANEL = True
+
+CONF_EXTERNAL_URL   = "external_url"
+CONF_EXTERNAL_TITLE = "external_title"
+CONF_EXTERNAL_ICON  = "external_icon"
+CONF_EXTERNAL_PANEL = "external_panel"
+DEFAULT_EXTERNAL_PANEL = False
+DEFAULT_EXTERNAL_ICON  = "mdi:web"
