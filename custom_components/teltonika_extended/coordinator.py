@@ -50,6 +50,7 @@ class TeltonikaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.client = client
         self.host = host
+        self.router_base_url: str = _base_url(host)  # https://192.168.7.1
         self.system_info = None
         self._backup_store = Store(hass, 1, f"{DOMAIN}_{host}_backup_status")
         self._backup_status: dict = {}

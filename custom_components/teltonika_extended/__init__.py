@@ -7,6 +7,7 @@ import voluptuous as vol
 from teltasync import Teltasync
 
 from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.persistent_notification import async_create as notify_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
@@ -36,11 +37,20 @@ def _panel_url_path(entry: ConfigEntry) -> str:
     return f"teltonika_{entry.entry_id[:8].lower()}"
 
 
-def _register_panel(hass: HomeAssistant, entry: ConfigEntry, router_url: str) -> None:
-    """Add the router's web UI as a sidebar iframe panel."""
-    url_path = _panel_url_path(entry)
-    # Use device hostname as sidebar title if available
-    title = entry.title  # e.g. 'Teltonika RUTX50'
+def _register_proxy(hass: HomeAssistant) -> None:
+    """Register the reverse proxy HTTP view (only once)."""
+    from .proxy import TeltonikaProxyView
+    if not hasattr(hass.data, "_teltonika_proxy_registered"):
+        hass.http.register_view(TeltonikaProxyView())
+        hass.data["_teltonika_proxy_registered"] = True
+        _LOGGER.info("Teltonika reverse proxy registered at /api/teltonika_proxy/")
+
+
+def _register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Add router WebUI as sidebar panel via reverse proxy."""
+    url_path    = _panel_url_path(entry)
+    proxy_url   = f"/api/teltonika_proxy/{entry.entry_id}/"
+    title       = entry.title  # e.g. 'Teltonika RUTX50'
 
     try:
         async_register_built_in_panel(
@@ -49,10 +59,10 @@ def _register_panel(hass: HomeAssistant, entry: ConfigEntry, router_url: str) ->
             sidebar_title=title,
             sidebar_icon="mdi:router-wireless",
             frontend_url_path=url_path,
-            config={"url": router_url},
+            config={"url": proxy_url},  # same-origin proxy URL → no CORS/iframe blocks
             require_admin=False,
         )
-        _LOGGER.info("Registered sidebar panel '%s' → %s", title, router_url)
+        _LOGGER.info("Registered sidebar panel '%s' → %s", title, proxy_url)
     except Exception as err:
         _LOGGER.warning("Could not register sidebar panel: %s", err)
 
@@ -78,8 +88,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.services.has_service(DOMAIN, SERVICE_RESTORE):
         _register_services(hass)
 
-    # Register sidebar panel for this router's web UI
-    _register_panel(hass, entry, base_url)
+    # Store router base URL on coordinator for proxy use
+    coordinator.router_base_url = base_url
+
+    # Register reverse proxy view (once per HA instance)
+    _register_proxy(hass)
+
+    # Register sidebar panel → points to proxy URL (same HA origin)
+    _register_panel(hass, entry)
 
     return True
 
