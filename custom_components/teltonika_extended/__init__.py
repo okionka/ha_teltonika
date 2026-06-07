@@ -97,6 +97,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register reverse proxy view (once per HA instance)
     _register_proxy(hass)
 
+    # Sync external URL to coordinator (needed by proxy)
+    coordinator.external_url = entry.options.get(CONF_EXTERNAL_URL, "").strip()
+
     # Register sidebar panel (router proxy) if enabled
     if entry.options.get(CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL):
         _register_panel(hass, entry)
@@ -228,15 +231,17 @@ def _register_services(hass: HomeAssistant) -> None:
 
 
 def _register_external_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Add configurable external URL as a sidebar iframe panel."""
+    """Add external URL as sidebar panel via reverse proxy (strips X-Frame-Options)."""
     url = entry.options.get(CONF_EXTERNAL_URL, "").strip()
     if not url:
         _LOGGER.debug("External panel enabled but no URL configured")
         return
 
-    title = entry.options.get(CONF_EXTERNAL_TITLE, "").strip() or "Router Ext"
-    icon  = entry.options.get(CONF_EXTERNAL_ICON, DEFAULT_EXTERNAL_ICON).strip()
-    path  = _panel_url_path(entry) + "_ext"
+    title     = entry.options.get(CONF_EXTERNAL_TITLE, "").strip() or "Router Extern"
+    icon      = entry.options.get(CONF_EXTERNAL_ICON, DEFAULT_EXTERNAL_ICON).strip()
+    ext_id    = entry.entry_id + "_ext"   # signals proxy to use external_url
+    path      = _panel_url_path(entry) + "_ext"
+    proxy_url = f"/api/teltonika_proxy/{ext_id}/"
 
     try:
         async_register_built_in_panel(
@@ -245,10 +250,12 @@ def _register_external_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
             sidebar_title=title,
             sidebar_icon=icon,
             frontend_url_path=path,
-            config={"url": url},
+            config={"url": proxy_url},   # routed through proxy → X-Frame-Options removed
             require_admin=False,
         )
-        _LOGGER.info("Registered external sidebar panel '%s' → %s", title, url)
+        _LOGGER.info(
+            "Registered external sidebar panel '%s' → proxy → %s", title, url
+        )
     except Exception as err:
         _LOGGER.warning("Could not register external panel: %s", err)
 
@@ -263,6 +270,12 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
             async_remove_panel(hass, _panel_url_path(entry))
         except Exception:
             pass
+
+    # Sync external URL to coordinator
+    domain_data = hass.data.get(DOMAIN, {})
+    for coord in domain_data.values():
+        if hasattr(coord, "external_url"):
+            coord.external_url = entry.options.get(CONF_EXTERNAL_URL, "").strip()
 
     # External URL panel
     ext_path = _panel_url_path(entry) + "_ext"
