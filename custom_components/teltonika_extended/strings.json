@@ -26,9 +26,10 @@
         "data": {
           "sidebar_panel": "Router-WebUI in Seitenleiste (Reverse Proxy)",
           "external_panel": "Externe URL in Seitenleiste anzeigen",
-          "external_url": "Externe URL (z.B. https://vpn.example.com)",
-          "external_title": "Bezeichnung in der Seitenleiste",
-          "external_icon": "MDI Icon (z.B. mdi:web, mdi:vpn, mdi:monitor)",
+          "external_url": "Externe URL (z.B. https://rutx50.example.com)",
+          "external_title": "Bezeichnung in der Seitenleiste (leer = URL)",
+          "external_icon": "MDI Icon (z.B. mdi:web, mdi:router-wireless)",
+          "external_proxy": "Externe URL über HA-Proxy leiten (bei X-Frame-Options Fehler)",
           "max_backups": "Maximale Anzahl gespeicherter Backups (1–50)"
         }
       }

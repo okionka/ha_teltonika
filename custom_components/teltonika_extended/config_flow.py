@@ -12,9 +12,9 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
-    CONF_EXTERNAL_ICON, CONF_EXTERNAL_PANEL, CONF_EXTERNAL_TITLE, CONF_EXTERNAL_URL,
+    CONF_EXTERNAL_ICON, CONF_EXTERNAL_PANEL, CONF_EXTERNAL_PROXY, CONF_EXTERNAL_TITLE, CONF_EXTERNAL_URL,
     CONF_MAX_BACKUPS, CONF_SIDEBAR_PANEL, CONF_VERIFY_SSL,
-    DEFAULT_EXTERNAL_ICON, DEFAULT_EXTERNAL_PANEL,
+    DEFAULT_EXTERNAL_ICON, DEFAULT_EXTERNAL_PANEL, DEFAULT_EXTERNAL_PROXY,
     DEFAULT_MAX_BACKUPS, DEFAULT_SIDEBAR_PANEL, DOMAIN,
 )
 
@@ -118,6 +118,8 @@ class TeltonikaOptionsFlow(OptionsFlow):
                 vol.Optional(CONF_EXTERNAL_URL,   default=current_ext_url):   str,
                 vol.Optional(CONF_EXTERNAL_TITLE, default=current_ext_title): str,
                 vol.Optional(CONF_EXTERNAL_ICON,  default=current_ext_icon):  str,
+                vol.Required(CONF_EXTERNAL_PROXY,
+                             default=opts.get(CONF_EXTERNAL_PROXY, DEFAULT_EXTERNAL_PROXY)): bool,
                 # Backup
                 vol.Required(CONF_MAX_BACKUPS, default=current_max): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=50)

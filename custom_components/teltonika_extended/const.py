@@ -40,3 +40,6 @@ CONF_EXTERNAL_ICON  = "external_icon"
 CONF_EXTERNAL_PANEL = "external_panel"
 DEFAULT_EXTERNAL_PANEL = False
 DEFAULT_EXTERNAL_ICON  = "mdi:web"
+
+CONF_EXTERNAL_PROXY = "external_proxy"
+DEFAULT_EXTERNAL_PROXY = False

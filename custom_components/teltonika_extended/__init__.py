@@ -17,9 +17,9 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     BACKUP_DIR,
-    CONF_EXTERNAL_ICON, CONF_EXTERNAL_PANEL, CONF_EXTERNAL_TITLE, CONF_EXTERNAL_URL,
+    CONF_EXTERNAL_ICON, CONF_EXTERNAL_PANEL, CONF_EXTERNAL_PROXY, CONF_EXTERNAL_TITLE, CONF_EXTERNAL_URL,
     CONF_SIDEBAR_PANEL, CONF_VERIFY_SSL,
-    DEFAULT_EXTERNAL_ICON, DEFAULT_EXTERNAL_PANEL,
+    DEFAULT_EXTERNAL_ICON, DEFAULT_EXTERNAL_PANEL, DEFAULT_EXTERNAL_PROXY,
     DEFAULT_SIDEBAR_PANEL, DOMAIN, SERVICE_BACKUP, SERVICE_RESTORE,
 )
 from .coordinator import TeltonikaCoordinator
@@ -235,17 +235,30 @@ def _register_services(hass: HomeAssistant) -> None:
 
 
 def _register_external_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Add external URL as sidebar panel via reverse proxy (strips X-Frame-Options)."""
+    """Add external URL as sidebar panel.
+
+    By default uses a direct iframe (browser can reach public URL).
+    Enable 'Via Proxy' option if X-Frame-Options blocks the direct iframe.
+    """
     url = entry.options.get(CONF_EXTERNAL_URL, "").strip()
     if not url:
         _LOGGER.debug("External panel enabled but no URL configured")
         return
 
-    title     = entry.options.get(CONF_EXTERNAL_TITLE, "").strip() or "Router Extern"
-    icon      = entry.options.get(CONF_EXTERNAL_ICON, DEFAULT_EXTERNAL_ICON).strip()
-    ext_id    = entry.entry_id + "_ext"   # signals proxy to use external_url
-    path      = _panel_url_path(entry) + "_ext"
-    proxy_url = f"/api/teltonika_proxy/{ext_id}/"
+    title      = entry.options.get(CONF_EXTERNAL_TITLE, "").strip() or url
+    icon       = entry.options.get(CONF_EXTERNAL_ICON, DEFAULT_EXTERNAL_ICON).strip()
+    use_proxy  = entry.options.get(CONF_EXTERNAL_PROXY, DEFAULT_EXTERNAL_PROXY)
+    panel_path = _panel_url_path(entry) + "_ext"
+
+    if use_proxy:
+        # Route through HA proxy → strips X-Frame-Options
+        ext_id    = entry.entry_id + "_ext"
+        panel_url = f"/api/teltonika_proxy/{ext_id}/"
+        _LOGGER.info("External panel '%s' → via proxy → %s", title, url)
+    else:
+        # Direct iframe — works when browser can reach the URL directly
+        panel_url = url
+        _LOGGER.info("External panel '%s' → direct → %s", title, url)
 
     try:
         async_register_built_in_panel(
@@ -253,12 +266,9 @@ def _register_external_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
             component_name="iframe",
             sidebar_title=title,
             sidebar_icon=icon,
-            frontend_url_path=path,
-            config={"url": proxy_url},   # routed through proxy → X-Frame-Options removed
+            frontend_url_path=panel_path,
+            config={"url": panel_url},
             require_admin=False,
-        )
-        _LOGGER.info(
-            "Registered external sidebar panel '%s' → proxy → %s", title, url
         )
     except Exception as err:
         _LOGGER.warning("Could not register external panel: %s", err)

@@ -38,6 +38,30 @@ _SKIP_RESPONSE = frozenset({
 
 _SESSION_KEY = f"{DOMAIN}_proxy_session"
 
+# Injected before any router JS to prevent iframe-escape loops.
+# Makes the page believe it is NOT running inside an iframe.
+_ANTI_IFRAME_SCRIPT = """<script>
+(function(){try{
+  // Spoof window.top/parent/frameElement so router JS thinks it's top-level
+  var _w=window;
+  function _self(){return _w;}
+  Object.defineProperty(_w,'top',         {configurable:true,get:_self});
+  Object.defineProperty(_w,'parent',       {configurable:true,get:_self});
+  Object.defineProperty(_w,'frameElement', {configurable:true,get:function(){return null;}});
+  // Block window.top.location escape attempts
+  var _desc=Object.getOwnPropertyDescriptor(Location.prototype,'href');
+  if(_desc&&_desc.set){
+    Object.defineProperty(Location.prototype,'href',{
+      get:_desc.get,
+      set:function(u){
+        // Let relative paths pass (they resolve via <base href> through proxy)
+        _desc.set.call(this,u);
+      }
+    });
+  }
+}catch(e){}})();
+</script>"""
+
 # HTML attributes whose values are URLs
 _URL_ATTRS = re.compile(
     r"""((?:src|href|action|data-src|data-href|data-url|poster|formaction)
@@ -78,14 +102,15 @@ def _rewrite_html(body: bytes, router_base: str, proxy_base: str) -> bytes:
 
     proxy_base = proxy_base.rstrip("/") + "/"
 
-    # ── 1. Inject <base href> ────────────────────────────────────────────
+    # ── 1. Inject <base href> + anti-iframe script ───────────────────────
     base_tag = f'<base href="{proxy_base}">'
+    inject   = base_tag + _ANTI_IFRAME_SCRIPT
     text, n = re.subn(
-        r"(<head(?:\s[^>]*)?>)", rf"\1{base_tag}",
+        r"(<head(?:\s[^>]*)?>)", rf"\1{inject}",
         text, count=1, flags=re.IGNORECASE,
     )
     if n == 0:
-        text = base_tag + text
+        text = inject + text
 
     # ── 2. Rewrite HTML attribute values — protect only inline JS content ──
     # Split into: [non-script, full-script-block, non-script, ...]
