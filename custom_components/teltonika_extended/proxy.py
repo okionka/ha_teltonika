@@ -136,7 +136,7 @@ class TeltonikaProxyView(HomeAssistantView):
 
     url  = "/api/teltonika_proxy/{entry_id}/{path:.*}"
     name = "api:teltonika_proxy"
-    requires_auth = True    # HA login required
+    requires_auth = False   # Router has its own login page
     cors_allowed  = False
 
     # One proxy session shared across all requests (no SSL verify)

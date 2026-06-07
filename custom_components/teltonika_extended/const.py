@@ -30,3 +30,6 @@ KEY_INTERFACES = "interfaces"
 
 CONF_MAX_BACKUPS = "max_backups"
 DEFAULT_MAX_BACKUPS = 5
+
+CONF_SIDEBAR_PANEL = "sidebar_panel"
+DEFAULT_SIDEBAR_PANEL = True

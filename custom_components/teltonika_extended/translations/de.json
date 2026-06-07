@@ -23,9 +23,10 @@
       "init": {
         "title": "Teltonika Extended Einstellungen",
         "data": {
+          "sidebar_panel": "Router-WebUI in HA-Seitenleiste anzeigen (Reverse Proxy)",
           "max_backups": "Maximale Anzahl gespeicherter Backups (1–50)"
         },
-        "description": "Älteste Backups werden beim Erstellen eines neuen automatisch gelöscht."
+        "description": "Der Sidebar-Eintrag öffnet das Router-WebUI über einen integrierten Reverse Proxy."
       }
     }
   }

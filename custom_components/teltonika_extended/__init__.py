@@ -94,8 +94,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register reverse proxy view (once per HA instance)
     _register_proxy(hass)
 
-    # Register sidebar panel → points to proxy URL (same HA origin)
-    _register_panel(hass, entry)
+    # Register sidebar panel if enabled in options
+    if entry.options.get(CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL):
+        _register_panel(hass, entry)
+
+    # Re-register / remove panel when options change
+    entry.async_on_unload(
+        entry.add_update_listener(_async_options_updated)
+    )
 
     return True
 
@@ -214,6 +220,20 @@ def _register_services(hass: HomeAssistant) -> None:
     )
 
 
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update — toggle sidebar panel."""
+    sidebar_enabled = entry.options.get(CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL)
+    url_path = _panel_url_path(entry)
+    if sidebar_enabled:
+        _register_panel(hass, entry)
+    else:
+        try:
+            async_remove_panel(hass, url_path)
+            _LOGGER.info("Removed sidebar panel for %s", entry.title)
+        except Exception:
+            pass
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if ok:
@@ -221,9 +241,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not hass.data.get(DOMAIN):
             hass.services.async_remove(DOMAIN, SERVICE_RESTORE)
             hass.services.async_remove(DOMAIN, "restore_config_apply")
-        # Remove sidebar panel
+        # Remove sidebar panel (if it was registered)
         try:
             async_remove_panel(hass, _panel_url_path(entry))
         except Exception:
-            pass
+            pass  # Panel may not have been registered if option was disabled
     return ok

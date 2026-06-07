@@ -13,8 +13,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_MAX_BACKUPS,
+    CONF_SIDEBAR_PANEL,
     CONF_VERIFY_SSL,
     DEFAULT_MAX_BACKUPS,
+    DEFAULT_SIDEBAR_PANEL,
     DOMAIN,
 )
 
@@ -101,14 +103,15 @@ class TeltonikaOptionsFlow(OptionsFlow):
         current_max = self._config_entry.options.get(
             CONF_MAX_BACKUPS, DEFAULT_MAX_BACKUPS
         )
+        current_sidebar = self._config_entry.options.get(
+            CONF_SIDEBAR_PANEL, DEFAULT_SIDEBAR_PANEL
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
+                vol.Required(CONF_SIDEBAR_PANEL, default=current_sidebar): bool,
                 vol.Required(CONF_MAX_BACKUPS, default=current_max): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=50)
                 ),
             }),
-            description_placeholders={
-                "current": str(current_max),
-            },
         )
