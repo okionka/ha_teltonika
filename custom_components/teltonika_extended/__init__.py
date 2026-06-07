@@ -91,9 +91,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.services.has_service(DOMAIN, SERVICE_RESTORE):
         _register_services(hass)
 
-    # Store router base URL on coordinator for proxy use
-    coordinator.router_base_url = base_url
-
     # Register reverse proxy view (once per HA instance)
     _register_proxy(hass)
 
