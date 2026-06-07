@@ -15,7 +15,10 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
-from .const import BACKUP_DIR, CONF_VERIFY_SSL, DOMAIN, SERVICE_BACKUP, SERVICE_RESTORE
+from .const import (
+    BACKUP_DIR, CONF_SIDEBAR_PANEL, CONF_VERIFY_SSL,
+    DEFAULT_SIDEBAR_PANEL, DOMAIN, SERVICE_BACKUP, SERVICE_RESTORE,
+)
 from .coordinator import TeltonikaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
