@@ -4,10 +4,12 @@ Routes all browser requests through HA:
   /api/teltonika_proxy/{entry_id}/      → coordinator.router_base_url
   /api/teltonika_proxy/{entry_id}_ext/  → coordinator.external_url
 
-Minimal rewriting strategy:
-- Only <base href> is injected (handles most relative paths via browser)
-- Redirects followed server-side (prevent redirect loops in browser)
-- X-Frame-Options / CSP headers stripped
+Rewriting strategy:
+- Follow redirects server-side (no browser redirect loops)
+- Inject <base href> for relative paths
+- Rewrite root-relative paths in HTML ATTRIBUTES only (src=, href=, action=)
+- Do NOT touch JavaScript code (causes SPA routing loops)
+- Strip X-Frame-Options / CSP headers
 """
 from __future__ import annotations
 
@@ -30,18 +32,28 @@ _SKIP_REQUEST = frozenset({
     "authorization", "x-ingress-path", "x-forwarded-for", "x-real-ip",
 })
 _SKIP_RESPONSE = frozenset({
-    "transfer-encoding", "connection", "keep-alive",
-    "content-length",           # recalculated
-    "content-security-policy",  # blocks iframe embedding
-    "x-frame-options",          # blocks iframe embedding
-    "x-content-type-options",
+    "transfer-encoding", "connection", "keep-alive", "content-length",
+    "content-security-policy", "x-frame-options", "x-content-type-options",
 })
 
 _SESSION_KEY = f"{DOMAIN}_proxy_session"
 
+# HTML attributes whose values are URLs
+_URL_ATTRS = re.compile(
+    r"""((?:src|href|action|data-src|data-href|data-url|poster|formaction)
+         \s*=\s*)
+        (["\'])          # opening quote
+        (/[^"\'>\s]*)   # root-relative path starting with /
+        \2               # closing quote
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+# CSS url() with root-relative path
+_CSS_URL = re.compile(r"""url\((['"]?)(/[^)'"\s]+)\1\)""")
+
 
 async def get_proxy_session(hass: HomeAssistant) -> aiohttp.ClientSession:
-    """Return (or lazily create) the shared proxy aiohttp session."""
     session: aiohttp.ClientSession | None = hass.data.get(_SESSION_KEY)
     if session is None or session.closed:
         connector = aiohttp.TCPConnector(ssl=False, limit=20)
@@ -50,29 +62,80 @@ async def get_proxy_session(hass: HomeAssistant) -> aiohttp.ClientSession:
     return session
 
 
-def _inject_base(body: bytes, proxy_base: str) -> bytes:
+def _rewrite_html(body: bytes, router_base: str, proxy_base: str) -> bytes:
     """
-    Inject <base href=proxy_base> into HTML <head>.
-    This single change makes the browser resolve all relative URLs through
-    the proxy without any JS-breaking regex rewrites.
+    Rewrite HTML so assets and links go through the proxy.
+
+    1. Inject <base href> for relative paths
+    2. Rewrite root-relative paths in HTML attributes only
+       (/assets/app.js → /api/teltonika_proxy/{id}/assets/app.js)
+    3. Do NOT touch <script> contents — JS path logic must stay intact
     """
     try:
         text = body.decode("utf-8", errors="replace")
     except Exception:
         return body
 
+    proxy_base = proxy_base.rstrip("/") + "/"
+
+    # ── 1. Inject <base href> ────────────────────────────────────────────
     base_tag = f'<base href="{proxy_base}">'
-    # Insert after opening <head> tag (with or without attributes)
-    patched, n = re.subn(
-        r"(<head(?:\s[^>]*)?>)",
-        rf"\1{base_tag}",
+    text, n = re.subn(
+        r"(<head(?:\s[^>]*)?>)", rf"\1{base_tag}",
         text, count=1, flags=re.IGNORECASE,
     )
     if n == 0:
-        # No <head> found — prepend
-        patched = base_tag + text
+        text = base_tag + text
 
-    return patched.encode("utf-8")
+    # ── 2. Rewrite HTML attribute values — protect only inline JS content ──
+    # Split into: [non-script, full-script-block, non-script, ...]
+    # For each script block: rewrite opening tag attrs, leave JS content alone.
+    segments = re.split(r"(<script[^>]*>.*?</script>)", text,
+                        flags=re.IGNORECASE | re.DOTALL)
+
+    def _fix_attr(m: re.Match) -> str:
+        attr_eq, q, url = m.group(1), m.group(2), m.group(3)
+        if url.startswith("//") or "teltonika_proxy" in url:
+            return m.group(0)
+        return f"{attr_eq}{q}{proxy_base}{url.lstrip('/')}{q}"
+
+    def _fix_script_block(block: str) -> str:
+        """Rewrite <script src="..."> opening tag, leave JS content untouched."""
+        m2 = re.match(
+            r"(<script[^>]*>)(.*?)(</script>)",
+            block, flags=re.IGNORECASE | re.DOTALL,
+        )
+        if m2:
+            opening = _URL_ATTRS.sub(_fix_attr, m2.group(1))
+            return opening + m2.group(2) + m2.group(3)
+        return block
+
+    rewritten = []
+    for i, seg in enumerate(segments):
+        if i % 2 == 1:
+            rewritten.append(_fix_script_block(seg))   # rewrite tag, not content
+        else:
+            rewritten.append(_URL_ATTRS.sub(_fix_attr, seg))
+
+    return "".join(rewritten).encode("utf-8")
+
+
+def _rewrite_css(body: bytes, proxy_base: str) -> bytes:
+    """Rewrite root-relative url() in CSS."""
+    try:
+        text = body.decode("utf-8", errors="replace")
+    except Exception:
+        return body
+
+    proxy_base = proxy_base.rstrip("/") + "/"
+
+    def _fix(m: re.Match) -> str:
+        q, url = m.group(1), m.group(2)
+        if "teltonika_proxy" in url:
+            return m.group(0)
+        return f"url({q}{proxy_base}{url.lstrip('/')}{q})"
+
+    return _CSS_URL.sub(_fix, text).encode("utf-8")
 
 
 class TeltonikaProxyView(HomeAssistantView):
@@ -81,13 +144,9 @@ class TeltonikaProxyView(HomeAssistantView):
     requires_auth = False
     cors_allowed  = False
 
-    async def _proxy(
-        self, request: web.Request, entry_id: str, path: str
-    ) -> web.Response:
-
+    async def _proxy(self, request: web.Request, entry_id: str, path: str) -> web.Response:
         hass: HomeAssistant = request.app["hass"]
 
-        # Resolve entry and target URL
         is_ext  = entry_id.endswith("_ext")
         real_id = entry_id[:-4] if is_ext else entry_id
 
@@ -97,8 +156,7 @@ class TeltonikaProxyView(HomeAssistantView):
 
         coordinator = domain_data.get(real_id)
         if coordinator is None:
-            return web.Response(status=404,
-                                text=f"Integration not found: {real_id}")
+            return web.Response(status=404, text=f"Integration not found: {real_id}")
 
         router_base = (
             getattr(coordinator, "external_url",    "").rstrip("/")
@@ -106,26 +164,25 @@ class TeltonikaProxyView(HomeAssistantView):
             getattr(coordinator, "router_base_url", "").rstrip("/")
         )
         if not router_base:
-            label = "External URL" if is_ext else "Router base URL"
-            return web.Response(status=503, text=f"{label} not configured")
+            return web.Response(
+                status=503,
+                text=f"{'External URL' if is_ext else 'Router URL'} not configured",
+            )
 
         proxy_base = f"/api/teltonika_proxy/{entry_id}/"
         target     = f"{router_base}/{path}" if path else router_base
         if request.query_string:
             target += f"?{request.query_string}"
 
-        # Build forwarded headers
         from urllib.parse import urlparse
         fwd: dict[str, str] = {"Host": urlparse(router_base).netloc}
         for k, v in request.headers.items():
             if k.lower() not in _SKIP_REQUEST:
                 fwd[k] = v
         if request.cookies:
-            fwd["Cookie"] = "; ".join(
-                f"{k}={v}" for k, v in request.cookies.items()
-            )
+            fwd["Cookie"] = "; ".join(f"{k}={v}" for k, v in request.cookies.items())
 
-        body = await request.read()
+        body    = await request.read()
         session = await get_proxy_session(hass)
 
         try:
@@ -133,34 +190,30 @@ class TeltonikaProxyView(HomeAssistantView):
                 request.method, target,
                 headers=fwd,
                 data=body or None,
-                # Follow redirects server-side to prevent browser redirect loops
                 allow_redirects=True,
                 max_redirects=10,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 resp_body = await resp.read()
+                ct = resp.headers.get("Content-Type", "").lower()
 
-                # Inject <base href> into HTML responses only
-                ct = resp.headers.get("Content-Type", "")
-                if "html" in ct.lower():
-                    resp_body = _inject_base(resp_body, proxy_base)
+                if "html" in ct:
+                    resp_body = _rewrite_html(resp_body, router_base, proxy_base)
+                elif "css" in ct:
+                    resp_body = _rewrite_css(resp_body, proxy_base)
 
-                # Build response headers (no Content-Type param — use header only)
                 out: dict[str, str] = {}
                 for k, v in resp.headers.items():
-                    if k.lower() in _SKIP_RESPONSE:
+                    kl = k.lower()
+                    if kl in _SKIP_RESPONSE:
                         continue
-                    if k.lower() == "set-cookie":
+                    if kl == "set-cookie":
                         v = re.sub(r";\s*Domain=[^;]+",   "", v, flags=re.IGNORECASE)
                         v = re.sub(r";\s*Secure\b",        "", v, flags=re.IGNORECASE)
                         v = re.sub(r";\s*SameSite=[^;]+",  "", v, flags=re.IGNORECASE)
                     out[k] = v
 
-                return web.Response(
-                    status=resp.status,
-                    body=resp_body,
-                    headers=out,
-                )
+                return web.Response(status=resp.status, body=resp_body, headers=out)
 
         except aiohttp.ClientConnectorError as err:
             _LOGGER.warning("Proxy: cannot connect to %s: %s", router_base, err)
@@ -170,10 +223,10 @@ class TeltonikaProxyView(HomeAssistantView):
                 text=f"<h2>Cannot connect to router</h2><p>{router_base}</p><p>{err}</p>",
             )
         except aiohttp.ClientError as err:
-            _LOGGER.warning("Proxy client error %s: %s", target, err)
+            _LOGGER.warning("Proxy error %s: %s", target, err)
             return web.Response(status=502, text=f"Proxy error: {err}")
         except Exception:
-            _LOGGER.exception("Proxy error: %s %s", request.method, target)
+            _LOGGER.exception("Proxy unexpected error: %s %s", request.method, target)
             return web.Response(status=500, text="Internal proxy error — see HA logs")
 
     async def get   (self, r, entry_id, path=""): return await self._proxy(r, entry_id, path)
