@@ -44,12 +44,16 @@ def _panel_url_path(entry: ConfigEntry) -> str:
 
 
 def _register_proxy(hass: HomeAssistant) -> None:
-    """Register the reverse proxy HTTP view (only once)."""
+    """Register the reverse proxy HTTP view (only once per HA instance)."""
     from .proxy import TeltonikaProxyView
-    if not hasattr(hass.data, "_teltonika_proxy_registered"):
-        hass.http.register_view(TeltonikaProxyView())
-        hass.data["_teltonika_proxy_registered"] = True
-        _LOGGER.info("Teltonika reverse proxy registered at /api/teltonika_proxy/")
+    _KEY = f"{DOMAIN}_proxy_registered"
+    if _KEY not in hass.data:          # use 'in' — hass.data is a dict, hasattr never works
+        try:
+            hass.http.register_view(TeltonikaProxyView())
+            hass.data[_KEY] = True
+            _LOGGER.info("Teltonika reverse proxy registered at /api/teltonika_proxy/")
+        except Exception as err:
+            _LOGGER.warning("Could not register proxy view: %s", err)
 
 
 def _register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None:
